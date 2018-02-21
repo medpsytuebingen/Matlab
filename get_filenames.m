@@ -1,6 +1,6 @@
 function filename = get_filenames(path, varargin)
-% Returns a list of files in a given folder or the filename of the nth file
-% in that folder.
+% Returns a list of files in a given folder, a filename starting with a matching string, 
+% or the filename of the nth file in that folder.
 %
 % Use as
 % filename = get_filenames(path, match, fullpath)
