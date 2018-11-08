@@ -263,10 +263,10 @@ for iAx = 1:handles.num_axes
 		if isfield(handles, 'comment') && ~isempty(handles.comment)
 			current_annotag = ['anno' num2str(iAx)];
 			if handles.initialpage
-				annotation('textbox',ax.Position,'String', handles.comment{iAx},'FitBoxToText','on', 'EdgeColor','none', 'Tag', current_annotag); % + [.001 -.001 0 0]
+				annotation('textbox',ax.Position,'String', handles.comment{tr},'FitBoxToText','on', 'EdgeColor','none', 'Tag', current_annotag); % + [.001 -.001 0 0]
 			else
 				an = findall(gcf,'Tag',current_annotag);
-				an.String = handles.comment{iAx};
+				an.String = handles.comment{tr};
 			end
 		end
 		
