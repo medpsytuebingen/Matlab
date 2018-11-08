@@ -94,7 +94,9 @@ else
 	error('No configuration given as input.')
 end
 
-% Set defaults
+% Set some settings and defaults
+handles.color_selected = [1 .7 .7]; % redish
+handles.color_unselected = [1 1 1]; % white
 if ~isfield(handles, 'page'), handles.page = 1; end
 if ~isfield(handles, 'ylim'), handles.ylim = [-150 150]; end
 if ~isfield(handles, 'xlim'), handles.xlim = [-2 6]; end
@@ -187,7 +189,9 @@ handles.pl_handles	= cell(numel(handles.ax_handles));
 handles.num_axes	= numel(handles.ax_handles);
 handles.num_trials	= size(handles.data.trial,2);
 handles.num_pages	= ceil(handles.num_trials / handles.num_axes);
-handles.output		= false(handles.num_trials,1); % eventual output
+if ~isfield(handles, 'output')
+	handles.output	= false(handles.num_trials,1); % eventual output
+end
 
 % Bring page selection in order
 set(handles.pagetext2, 'String', [' / ' num2str(handles.num_pages)]);
@@ -201,7 +205,7 @@ initializePage(hObject, handles)
 
 % Output voodoo in case we'll return result to user
 if ~isfield(handles, 'outputfile'), uiwait(handles.figure1); end
-% uiwait(handles.figure1);
+
 
 % --- Shows a new page (potting, bookkeeping etc.)
 function initializePage(hObject, handles)
@@ -251,6 +255,7 @@ for iAx = 1:handles.num_axes
 			handles.pl_handles{iAx}.XData = handles.data.time{tr}(l1:l2); % faster than calling plot() again
 			handles.pl_handles{iAx}.YData = handles.data.trial{tr}(l1:l2);
 		end
+		
 		% Behavior when clicked
 		set(ax,'ButtonDownFcn',{@toggleAxes, iAx}) % for the axes, please call our own button-down function
 		
@@ -265,11 +270,13 @@ for iAx = 1:handles.num_axes
 			end
 		end
 		
-		% Change some axes properties
+		% Set some axes properties
 		ax.YLim			= handles.ylim;
 		ax.YTickLabel	= '';
 		if handles.output(handles.ax_trial(iAx))
-			ax.Color			= [1 .7 .7];
+			handles.ax_handles{iAx}.Color = handles.color_selected;
+		else
+			handles.ax_handles{iAx}.Color = handles.color_unselected;
 		end
 		if iAx > numel(handles.ax_trial) - 5 && iAx <= numel(handles.ax_trial)
 			ax.XTick		= handles.data.time{tr}(l1)-rem(handles.data.time{tr}(l1),2):2:handles.data.time{tr}(l2)-rem(handles.data.time{tr}(l2),2); % :P
@@ -277,8 +284,6 @@ for iAx = 1:handles.num_axes
 			ax.XTick		= [];
 		end
 		hold(ax, 'off')
-		
-		
 	else
 		cla(ax) % if there ain't no data
 	end
@@ -311,14 +316,13 @@ end
 function toggleAxes(hObject, ~, iAx)
 handles = guidata(hObject);
 if ~handles.output(handles.ax_trial(iAx))
-	handles.ax_handles{iAx}.Color			= [1 .7 .7];
+	handles.ax_handles{iAx}.Color			= handles.color_selected;
 	handles.output(handles.ax_trial(iAx))	= true;
 else
-	handles.ax_handles{iAx}.Color			= [1 1 1];
+	handles.ax_handles{iAx}.Color			= handles.color_unselected;
 	handles.output(handles.ax_trial(iAx))	= false;
 end
 guidata(hObject, handles);
-
 
 % --- Executes on button press in previous.
 function previous_Callback(hObject, ~, handles)
