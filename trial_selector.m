@@ -286,6 +286,7 @@ end
 handles.initialpage = false;
 guidata(hObject, handles);
 
+
 % --- Outputs from this function are returned to the command line.
 function varargout = trial_selector_OutputFcn(hObject, ~, handles)
 % varargout  cell array for returning output args (see VARARGOUT);
@@ -343,6 +344,7 @@ if handles.page < handles.num_pages
 end
 
 
+% --- Executes when number is entered into page field.
 function pagesel_Callback(hObject, ~, handles)
 % hObject    handle to pagesel (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
