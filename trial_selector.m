@@ -422,3 +422,19 @@ else
 	end
 	delete(hObject); % closes the figure
 end
+
+
+% --- Executes on key press with focus on figure1 or any of its controls.
+function figure1_WindowKeyPressFcn(hObject, eventdata, handles)
+% hObject    handle to figure1 (see GCBO)
+% eventdata  structure with the following fields (see MATLAB.UI.FIGURE)
+%	Key: name of the key that was pressed, in lower case
+%	Character: character interpretation of the key(s) that was pressed
+%	Modifier: name(s) of the modifier key(s) (i.e., control, shift) pressed
+% handles    structure with handles and user data (see GUIDATA)
+if strcmp(eventdata.Key, 'leftarrow')
+	previous_Callback(hObject, [], handles);
+elseif strcmp(eventdata.Key, 'rightarrow')
+	next_Callback(hObject, [], handles);
+end
+
