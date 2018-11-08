@@ -49,6 +49,10 @@ function varargout = trial_selector(varargin)
 %   know a more elegant solution, please contribute!
 % . there might be further tasks hidden in the comments (search for
 %   'TODO')
+% . currently two vertical lines are displayed in each plot, one at -.5 and
+%	one at 0. this is motivated by my own project. it'd be preferably if
+%	those were input parameters (e.g. an array of x-axis values and an
+%	array of color definitions of the same length?)
 %
 % AUTHOR:
 % Jens Klinzing, jens.klinzing@uni-tuebingen.de
@@ -249,8 +253,12 @@ for iAx = 1:handles.num_axes
 			pl2				= plot(ax, [0 0], handles.ylim); % vertical line at 0
 			pl2.LineWidth	= .5;
 			pl2.Color		= 'r';
+			pl3				= plot(ax, [-.5 -.5], handles.ylim); % vertical line at -.5
+			pl3.LineWidth	= .5;
+			pl3.Color		= [.8 .8 .8];			
 			set(handles.pl_handles{iAx},'HitTest','off') % otherwise those plots will register a button down
 			set(pl2,'HitTest','off') %... and not our axes
+			set(pl3,'HitTest','off')
 		else
 			handles.pl_handles{iAx}.XData = handles.data.time{tr}(l1:l2); % faster than calling plot() again
 			handles.pl_handles{iAx}.YData = handles.data.trial{tr}(l1:l2);
