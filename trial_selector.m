@@ -13,12 +13,20 @@ function varargout = trial_selector(varargin)
 % .inputfile		string (optional); path to dataset
 %					alternatively, data can be provided as a second input
 %					argument
+% .outputfile		string (optional); path to (potentially existing)
+%					output file
 % .page				int; on which page to start on (default: 1)
-% .latency			int array; time limits for displaying trials 
+% .latency			int array; time limits for displaying trials
 %					(e.g. [-1 4]
 % .comment			cell array of strings with as many entries as there are
 %					trials; will be shown in the corner of each plot; could
 %					for instance be used to show trial conditions
+% .selected			array of logicals with as many entries as there are
+%					trials; pre-selects those trials (for instance from a
+%					previous run. Alternatively, existing selections can be
+%					provided as a file using:
+% .load_selected 	logical (optional); will try to load existing
+%					selections from cfg.outputfile (default: false)
 %
 % OUTPUT VARIABLES:
 % output			array of logicals; is only returned if cfg.outputfile
@@ -26,35 +34,47 @@ function varargout = trial_selector(varargin)
 %
 % COMMENTS:
 % All important stuff happens in:
-% trial_selector_OpeningFcn		runs once at the beginning 
+% trial_selector_OpeningFcn		runs once at the beginning
 % initializePage				is called for displaying each new page
+%
+% WANT TO CONTRIBUTE?
+% Cool! Here are some suggestions for things to do (just send me a pull
+% request on github):
+% . currently the function can only handle single-channel input. this could
+%   be extended to (lets say) 5 channels that are shown in a butterfly plot
+%   with a nice color scheme.
+% . the output to command line is implemented an a dodgy way. matlab did
+%   not make it easy for me to have that output independent of whether the
+%   user clicked the X to close the window or the 'close' button. if you
+%   know a more elegant solution, please contribute!
+% . there might be further tasks hidden in the comments (search for
+%   'TODO')
 %
 % AUTHOR:
 % Jens Klinzing, jens.klinzing@uni-tuebingen.de
 
-
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
-                   'gui_Singleton',  gui_Singleton, ...
-                   'gui_OpeningFcn', @trial_selector_OpeningFcn, ...
-                   'gui_OutputFcn',  @trial_selector_OutputFcn, ...
-                   'gui_LayoutFcn',  [] , ...
-                   'gui_Callback',   []);
+	'gui_Singleton',  gui_Singleton, ...
+	'gui_OpeningFcn', @trial_selector_OpeningFcn, ...
+	'gui_OutputFcn',  @trial_selector_OutputFcn, ...
+	'gui_LayoutFcn',  [] , ...
+	'gui_Callback',   []);
 if nargin && ischar(varargin{1})
-    gui_State.gui_Callback = str2func(varargin{1});
+	gui_State.gui_Callback = str2func(varargin{1});
 end
 
 if nargout
-    [varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:});
+	[varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:});
 else
-    gui_mainfcn(gui_State, varargin{:});
+	gui_mainfcn(gui_State, varargin{:});
 end
 % End initialization code - DO NOT EDIT
 
 
 % --- Executes just before trial_selector is made visible.
-function trial_selector_OpeningFcn(hObject, eventdata, handles, varargin)
+function trial_selector_OpeningFcn(hObject, ~, handles, varargin)
 
 % For debugging
 % if numel(varargin) == 0
@@ -74,10 +94,22 @@ else
 	error('No configuration given as input.')
 end
 
-% Check input and load data
+% Set defaults
+if ~isfield(handles, 'page'), handles.page = 1; end
+if ~isfield(handles, 'ylim'), handles.ylim = [-150 150]; end
+if ~isfield(handles, 'xlim'), handles.xlim = [-2 6]; end
+if ~isfield(handles, 'load_selected'), handles.load_selected = false; end
 if isfield(handles, 'inputfile') && isempty(handles.inputfile)
 	handles = rmfield(handles, 'inputfile');
 end
+if isfield(handles, 'outputfile') && isempty(handles.outputfile)
+	handles = rmfield(handles, 'outputfile');
+end
+if isfield(handles, 'selected') && isempty(handles.selected)
+	handles = rmfield(handles, 'selected');
+end
+
+% Load and check data
 if numel(varargin) == 2
 	if isfield(handles, 'inputfile')
 		error('You cannot provide both cfg.inputfile and data as input.')
@@ -93,8 +125,6 @@ else
 	handles.data = temp.(names{1});
 	clear temp names
 end
-
-% Check if data is the way we expect it
 requiredFields = {'trial', 'time'};
 for i = requiredFields
 	if ~isfield(handles.data,i)
@@ -105,14 +135,55 @@ if size(handles.data.trial, 1) ~= 1
 	error('Data should have only one channel.')
 end
 
-% Set defaults
-if ~isfield(handles, 'page'), handles.page = 1; end
-if ~isfield(handles, 'ylim'), handles.ylim = [-150 150]; end
-if ~isfield(handles, 'xlim'), handles.xlim = [-2 6]; end
-% if ~isfield(handles, 'outputfile'), handles.outputfile = []; end
+% Check other input
+if isfield(handles, 'selected')
+	if handles.load_selected
+		error('You cannot try to load an existing selection file and provide cfg.selected')
+	else
+		handles.output = handles.selected;
+	end
+end
+if isfield(handles, 'outputfile')
+	% Test whether existing selections exist and fit the data
+	if handles.load_selected
+		if exist(handles.outputfile, 'file')
+			temp = load(handles.outputfile);
+			names = fieldnames(temp);
+			if length(names) ~= 1
+				error('Unexpected content in existing trial selection file. File should contain one single structure.')
+			end
+			handles.output = temp.(names{1});
+			clear temp names
+			if ~islogical(handles.output) || size(handles.output, 2) ~= 1
+				error('Something is wrong with existing trial selections.')
+			elseif size(handles.output, 1) ~= size(handles.data.trial,2)
+				error('Existing trial selections do not fit the provided data.')
+			end
+		else
+			error('Cannot load existing selections, cfg.outputfile does not exist.')
+		end
+	end
+	% Test whether we will be able to write that file
+	[fid,errmsg] = fopen(handles.outputfile, 'a');
+	if ~isempty(errmsg)&&strcmp(errmsg,'Permission denied')
+		error('You do not have write permission to outputfile (%s).', handles.outputfile);
+	elseif ~isempty(errmsg)&&strcmp(errmsg,'No such file or directory')
+		error('Outputfile directory does not exist (%s).', handles.outputfile);
+	else
+		fclose(fid);
+	end
+end
+if isfield(handles, 'comment')
+	if isempty(handles.comment)
+		handles = rmfield(handles, 'comment');
+	elseif ~iscellstr(handles.comment) || length(handles.comment) ~= size(handles.data.trial,2)
+		error('Something is wrong with the comments you provided.')
+	end
+end
 
 % Bookkeeping
-handles.ax_handles	= {handles.axes1, handles.axes2, handles.axes3, handles.axes4, handles.axes5, handles.axes6, handles.axes7, handles.axes8, handles.axes9, handles.axes10, handles.axes11, handles.axes12, handles.axes13, handles.axes14, handles.axes15, handles.axes16, handles.axes17, handles.axes18, handles.axes19, handles.axes20}; % TODO: Add all 
+handles.ax_handles	= {handles.axes1, handles.axes2, handles.axes3, handles.axes4, handles.axes5, handles.axes6, handles.axes7, handles.axes8, handles.axes9, handles.axes10, handles.axes11, handles.axes12, handles.axes13, handles.axes14, handles.axes15, handles.axes16, handles.axes17, handles.axes18, handles.axes19, handles.axes20}; % TODO: Add all
+handles.pl_handles	= cell(numel(handles.ax_handles));
 handles.num_axes	= numel(handles.ax_handles);
 handles.num_trials	= size(handles.data.trial,2);
 handles.num_pages	= ceil(handles.num_trials / handles.num_axes);
@@ -122,6 +193,7 @@ handles.output		= false(handles.num_trials,1); % eventual output
 set(handles.pagetext2, 'String', [' / ' num2str(handles.num_pages)]);
 
 % Make sure all shenanigans are save in the almighty cloud
+handles.initialpage = true; % the first page is handled a bit differently than the others..
 guidata(hObject, handles);
 
 % Trigger the first page (mostly plotting)
@@ -134,7 +206,7 @@ if ~isfield(handles, 'outputfile'), uiwait(handles.figure1); end
 % --- Shows a new page (potting, bookkeeping etc.)
 function initializePage(hObject, handles)
 % Determine what to plot on the current page
-handles.ax_trial		= zeros(20,1); 
+handles.ax_trial		= zeros(20,1);
 first_trial				= (handles.page-1) * handles.num_axes + 1;
 last_trial				= handles.page * handles.num_axes;
 if last_trial > handles.num_trials, last_trial = handles.num_trials; end
@@ -160,23 +232,37 @@ end
 % Do the actual plotting
 for iAx = 1:handles.num_axes
 	ax		= handles.ax_handles{iAx}; % current axis
-	tr		= handles.ax_trial(iAx); % which trial to plot
-	cla(ax)
+	tr		= handles.ax_trial(iAx);   % which trial to plot
 	if tr ~= 0
 		% Do line plot
 		[~,l1]	= min(abs(handles.data.time{tr} - handles.xlim(1))); % lower time limit
 		[~,l2]	= min(abs(handles.data.time{tr} - handles.xlim(2))); % upper time limit
-		h				= plot(ax, handles.data.time{tr}(l1:l2), handles.data.trial{tr}(l1:l2));
-		h.LineWidth		= 1.0;
-		h.Color			= 'k';
-		hold(ax, 'on')
-		h2				= plot(ax, [0 0], handles.ylim); % vertical line at 0
-		h2.LineWidth	= .5;
-		h2.Color		= 'r';
+		if handles.initialpage
+			handles.pl_handles{iAx} = plot(ax, handles.data.time{tr}(l1:l2), handles.data.trial{tr}(l1:l2));
+			handles.pl_handles{iAx}.LineWidth = 1.0;
+			handles.pl_handles{iAx}.Color	= 'k';
+			hold(ax, 'on')
+			pl2				= plot(ax, [0 0], handles.ylim); % vertical line at 0
+			pl2.LineWidth	= .5;
+			pl2.Color		= 'r';
+			set(handles.pl_handles{iAx},'HitTest','off') % otherwise those plots will register a button down
+			set(pl2,'HitTest','off') %... and not our axes
+		else
+			handles.pl_handles{iAx}.XData = handles.data.time{tr}(l1:l2); % faster than calling plot() again
+			handles.pl_handles{iAx}.YData = handles.data.trial{tr}(l1:l2);
+		end
+		% Behavior when clicked
+		set(ax,'ButtonDownFcn',{@toggleAxes, iAx}) % for the axes, please call our own button-down function
+		
+		% Add the annotations
 		if isfield(handles, 'comment') && ~isempty(handles.comment)
 			current_annotag = ['anno' num2str(iAx)];
-			delete(findall(gcf,'Tag',current_annotag)); % otherwise they stack up and look ugly
-			annotation('textbox',ax.Position,'String', handles.comment{iAx},'FitBoxToText','on', 'EdgeColor','none', 'Tag', current_annotag); % + [.001 -.001 0 0]
+			if handles.initialpage
+				annotation('textbox',ax.Position,'String', handles.comment{iAx},'FitBoxToText','on', 'EdgeColor','none', 'Tag', current_annotag); % + [.001 -.001 0 0]
+			else
+				an = findall(gcf,'Tag',current_annotag);
+				an.String = handles.comment{iAx};
+			end
 		end
 		
 		% Change some axes properties
@@ -184,7 +270,7 @@ for iAx = 1:handles.num_axes
 		ax.YTickLabel	= '';
 		if handles.output(handles.ax_trial(iAx))
 			ax.Color			= [1 .7 .7];
-		end		
+		end
 		if iAx > numel(handles.ax_trial) - 5 && iAx <= numel(handles.ax_trial)
 			ax.XTick		= handles.data.time{tr}(l1)-rem(handles.data.time{tr}(l1),2):2:handles.data.time{tr}(l2)-rem(handles.data.time{tr}(l2),2); % :P
 		else
@@ -192,19 +278,16 @@ for iAx = 1:handles.num_axes
 		end
 		hold(ax, 'off')
 		
-		% Behavior when clicked
-		set(h,'HitTest','off') % otherwise those plots will register a button down
-		set(h2,'HitTest','off') %... and not our axes
-		set(ax,'ButtonDownFcn',{@toggleAxes, iAx}) % for the axes, please call our own button-down function
+		
 	else
 		cla(ax) % if there ain't no data
 	end
 end
+handles.initialpage = false;
 guidata(hObject, handles);
 
-
 % --- Outputs from this function are returned to the command line.
-function varargout = trial_selector_OutputFcn(hObject, eventdata, handles) 
+function varargout = trial_selector_OutputFcn(hObject, ~, handles)
 % varargout  cell array for returning output args (see VARARGOUT);
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -214,7 +297,7 @@ function varargout = trial_selector_OutputFcn(hObject, eventdata, handles)
 % whether outputfile is provided because a) nargout is not available within
 % a GUI for some reason (nargout is always 0) and b) because this output
 % function is called right away if uiwait is not enabled (absolute
-% nonsense, thanks matlab). 
+% nonsense, thanks matlab).
 % If you know of a better solution to the whole output disaster, please let
 % me know!
 if ~isfield(handles, 'outputfile')
@@ -237,7 +320,7 @@ guidata(hObject, handles);
 
 
 % --- Executes on button press in previous.
-function previous_Callback(hObject, eventdata, handles)
+function previous_Callback(hObject, ~, handles)
 % hObject    handle to previous (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -249,7 +332,7 @@ end
 
 
 % --- Executes on button press in next.
-function next_Callback(hObject, eventdata, handles)
+function next_Callback(hObject, ~, handles)
 % hObject    handle to next (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -281,7 +364,7 @@ end
 
 
 % --- Executes during object creation, after setting all properties.
-function pagesel_CreateFcn(hObject, eventdata, handles)
+function pagesel_CreateFcn(hObject, ~, ~)
 % hObject    handle to pagesel (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
@@ -289,21 +372,21 @@ function pagesel_CreateFcn(hObject, eventdata, handles)
 % Hint: edit controls usually have a white background on Windows.
 %       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
+	set(hObject,'BackgroundColor','white');
 end
 
 
 % --- Executes on button press in close.
-function close_Callback(hObject, eventdata, handles)
+function close_Callback(~, ~, ~)
 % hObject    handle to close (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
- close(gcf); % this leads to a call to figure1_CloseRequestFcn, which closereq doesn't
+close(gcf); % this leads to a call to figure1_CloseRequestFcn, which closereq doesn't
 
 
 % --- Executes when user attempts to close figure1.
 % Only executed if X is pressed.
-function figure1_CloseRequestFcn(hObject, eventdata, handles)
+function figure1_CloseRequestFcn(hObject, ~, handles)
 % hObject    handle to figure1 (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -314,15 +397,14 @@ function figure1_CloseRequestFcn(hObject, eventdata, handles)
 % anyways..
 if isequal(get(hObject,'waitstatus'),'waiting')
 	uiresume(hObject);
-    guidata(hObject,handles);
+	guidata(hObject,handles);
 else
- 	if ~isfield(handles, 'outputfile')|| isempty(handles.outputfile)
+	if ~isfield(handles, 'outputfile')|| isempty(handles.outputfile)
 		warning('Something went wrong, no outputfile provided.')
 	else
 		out = handles.output;
 		disp(['Saving output to ' handles.outputfile])
 		save(handles.outputfile, 'out');
 	end
-    delete(hObject); % closes the figure
-	
+	delete(hObject); % closes the figure
 end
