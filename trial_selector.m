@@ -196,6 +196,9 @@ handles.num_pages	= ceil(handles.num_trials / handles.num_axes);
 if ~isfield(handles, 'output')
 	handles.output	= false(handles.num_trials,1); % eventual output
 end
+if handles.page <= 0 || handles.page >= num_pages || mod(handles.page, 1) ~= 0
+	error('Invalid cfg.page.')
+end
 
 % Bring page selection in order
 set(handles.pagetext2, 'String', [' / ' num2str(handles.num_pages)]);
@@ -241,44 +244,70 @@ end
 for iAx = 1:handles.num_axes
 	ax		= handles.ax_handles{iAx}; % current axis
 	tr		= handles.ax_trial(iAx);   % which trial to plot
-	if tr ~= 0
-		% Do line plot
-		[~,l1]	= min(abs(handles.data.time{tr} - handles.xlim(1))); % lower time limit
-		[~,l2]	= min(abs(handles.data.time{tr} - handles.xlim(2))); % upper time limit
-		if handles.initialpage
+	
+	% Do line plot
+	if handles.initialpage
+		if tr ~= 0
+			[~,l1]	= min(abs(handles.data.time{tr} - handles.xlim(1))); % lower time limit
+			[~,l2]	= min(abs(handles.data.time{tr} - handles.xlim(2))); % upper time limit
 			handles.pl_handles{iAx} = plot(ax, handles.data.time{tr}(l1:l2), handles.data.trial{tr}(l1:l2));
-			handles.pl_handles{iAx}.LineWidth = 1.0;
-			handles.pl_handles{iAx}.Color	= 'k';
 			hold(ax, 'on')
 			pl2				= plot(ax, [0 0], handles.ylim); % vertical line at 0
-			pl2.LineWidth	= .5;
-			pl2.Color		= 'r';
 			pl3				= plot(ax, [-.5 -.5], handles.ylim); % vertical line at -.5
-			pl3.LineWidth	= .5;
-			pl3.Color		= [.8 .8 .8];			
-			set(handles.pl_handles{iAx},'HitTest','off') % otherwise those plots will register a button down
-			set(pl2,'HitTest','off') %... and not our axes
-			set(pl3,'HitTest','off')
-		else
+		else % in case already the first page has empty plots we still need to create the handles
+			handles.pl_handles{iAx} = plot(ax, [],[]);
+			pl2				= plot(ax, [],[]); % vertical line at 0
+			pl3				= plot(ax, [],[]); % vertical line at -.5
+		end
+		handles.pl_handles{iAx}.LineWidth = 1.0;
+		handles.pl_handles{iAx}.Color	= 'k';
+		pl2.LineWidth	= .5;
+		pl2.Color		= 'r';
+		pl3.LineWidth	= .5;
+		pl3.Color		= [.8 .8 .8];
+		set(handles.pl_handles{iAx},'HitTest','off') % otherwise those plots will register a button down
+		set(pl2,'HitTest','off') %... and not our axes
+		set(pl3,'HitTest','off')
+	else
+		if tr ~= 0
+			[~,l1]	= min(abs(handles.data.time{tr} - handles.xlim(1))); % lower time limit
+			[~,l2]	= min(abs(handles.data.time{tr} - handles.xlim(2))); % upper time limit
 			handles.pl_handles{iAx}.XData = handles.data.time{tr}(l1:l2); % faster than calling plot() again
 			handles.pl_handles{iAx}.YData = handles.data.trial{tr}(l1:l2);
+		else
+			handles.pl_handles{iAx}.XData = [];
+			handles.pl_handles{iAx}.YData = [];
 		end
-		
-		% Behavior when clicked
+	end
+	
+	% Behavior when clicked
+	if tr ~= 0
 		set(ax,'ButtonDownFcn',{@toggleAxes, iAx}) % for the axes, please call our own button-down function
-		
-		% Add the annotations
-		if isfield(handles, 'comment') && ~isempty(handles.comment)
-			current_annotag = ['anno' num2str(iAx)];
-			if handles.initialpage
+	else
+		set(ax,'ButtonDownFcn','')
+	end
+	
+	% Add the annotations
+	if isfield(handles, 'comment') && ~isempty(handles.comment)
+		current_annotag = ['anno' num2str(iAx)];
+		if handles.initialpage
+			if tr ~= 0
 				annotation('textbox',ax.Position,'String', handles.comment{tr},'FitBoxToText','on', 'EdgeColor','none', 'Tag', current_annotag); % + [.001 -.001 0 0]
 			else
-				an = findall(gcf,'Tag',current_annotag);
+				annotation('textbox',ax.Position,'String', [],'FitBoxToText','on', 'EdgeColor','none', 'Tag', current_annotag); % + [.001 -.001 0 0]
+			end
+		else
+			an = findall(gcf,'Tag',current_annotag);
+			if tr ~= 0
 				an.String = handles.comment{tr};
+			else
+				an.String = [];
 			end
 		end
-		
-		% Set some axes properties
+	end
+	
+	% Set some axes properties
+	if tr ~= 0
 		ax.YLim			= handles.ylim;
 		ax.YTickLabel	= '';
 		if handles.output(handles.ax_trial(iAx))
@@ -291,10 +320,8 @@ for iAx = 1:handles.num_axes
 		else
 			ax.XTick		= [];
 		end
-		hold(ax, 'off')
-	else
-		cla(ax) % if there ain't no data
 	end
+	hold(ax, 'off')
 end
 handles.initialpage = false;
 guidata(hObject, handles);
@@ -322,7 +349,7 @@ end
 
 % --- Selects/unselects plots.
 function toggleAxes(hObject, ~, iAx)
-handles = guidata(hObject);
+handles = guidata(hObject); % handing over handles as input parameter somehow did not work
 if ~handles.output(handles.ax_trial(iAx))
 	handles.ax_handles{iAx}.Color			= handles.color_selected;
 	handles.output(handles.ax_trial(iAx))	= true;
@@ -365,7 +392,7 @@ function pagesel_Callback(hObject, ~, handles)
 % Hints: get(hObject,'String') returns contents of pagesel as text
 %        str2double(get(hObject,'String')) returns contents of pagesel as a double
 in = str2double(get(hObject,'String'));
-if in < 1 || in > handles.num_pages
+if in < 1 || in > handles.num_pages || mod(in,1) ~= 0
 	set(hObject,'String', num2str(handles.page));
 	set(handles.pageinvalid, 'Visible', 'on');
 	initializePage(hObject, handles);
