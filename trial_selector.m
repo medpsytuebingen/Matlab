@@ -19,8 +19,9 @@ function varargout = trial_selector(varargin)
 % .latency			int array; time limits for displaying trials
 %					(e.g. [-1 4]
 % .comment			cell array of strings with as many entries as there are
-%					trials; will be shown in the corner of each plot; could
-%					for instance be used to show trial conditions
+%					trials (optional); will be shown in the corner of each
+%					plot; could for instance be used to show trial
+%					conditions
 % .selected			array of logicals with as many entries as there are
 %					trials; pre-selects those trials (for instance from a
 %					previous run. Alternatively, existing selections can be
@@ -196,7 +197,7 @@ handles.num_pages	= ceil(handles.num_trials / handles.num_axes);
 if ~isfield(handles, 'output')
 	handles.output	= false(handles.num_trials,1); % eventual output
 end
-if handles.page <= 0 || handles.page >= num_pages || mod(handles.page, 1) ~= 0
+if handles.page <= 0 || handles.page > handles.num_pages || mod(handles.page, 1) ~= 0
 	error('Invalid cfg.page.')
 end
 
@@ -245,39 +246,41 @@ for iAx = 1:handles.num_axes
 	ax		= handles.ax_handles{iAx}; % current axis
 	tr		= handles.ax_trial(iAx);   % which trial to plot
 	
-	% Do line plot
-	if handles.initialpage
-		if tr ~= 0
+	% Create line plots
+	if tr ~= 0 % if plot is not empty
+		if handles.initialpage  % if it is the first page we need to create figure handles
 			[~,l1]	= min(abs(handles.data.time{tr} - handles.xlim(1))); % lower time limit
 			[~,l2]	= min(abs(handles.data.time{tr} - handles.xlim(2))); % upper time limit
 			handles.pl_handles{iAx} = plot(ax, handles.data.time{tr}(l1:l2), handles.data.trial{tr}(l1:l2));
 			hold(ax, 'on')
 			pl2				= plot(ax, [0 0], handles.ylim); % vertical line at 0
 			pl3				= plot(ax, [-.5 -.5], handles.ylim); % vertical line at -.5
-		else % in case already the first page has empty plots we still need to create the handles
-			handles.pl_handles{iAx} = plot(ax, [],[]);
-			pl2				= plot(ax, [],[]); % vertical line at 0
-			pl3				= plot(ax, [],[]); % vertical line at -.5
-		end
-		handles.pl_handles{iAx}.LineWidth = 1.0;
-		handles.pl_handles{iAx}.Color	= 'k';
-		pl2.LineWidth	= .5;
-		pl2.Color		= 'r';
-		pl3.LineWidth	= .5;
-		pl3.Color		= [.8 .8 .8];
-		set(handles.pl_handles{iAx},'HitTest','off') % otherwise those plots will register a button down
-		set(pl2,'HitTest','off') %... and not our axes
-		set(pl3,'HitTest','off')
-	else
-		if tr ~= 0
-			[~,l1]	= min(abs(handles.data.time{tr} - handles.xlim(1))); % lower time limit
-			[~,l2]	= min(abs(handles.data.time{tr} - handles.xlim(2))); % upper time limit
+		else
+			[~,l1]	= min(abs(handles.data.time{tr} - handles.xlim(1)));  % lower time limit
+			[~,l2]	= min(abs(handles.data.time{tr} - handles.xlim(2)));  % upper time limit
 			handles.pl_handles{iAx}.XData = handles.data.time{tr}(l1:l2); % faster than calling plot() again
 			handles.pl_handles{iAx}.YData = handles.data.trial{tr}(l1:l2);
-		else
-			handles.pl_handles{iAx}.XData = [];
-			handles.pl_handles{iAx}.YData = [];
 		end
+	else % in case trial is empty we still need to plot something so that axes are correct
+		handles.pl_handles{iAx} = plot(ax, [handles.data.time{1}(l1) handles.data.time{1}(l2)],[0 0]); % take over time limits from first trial
+		hold(ax, 'on')
+		pl2				= plot(ax, [0 0], handles.ylim); % vertical line at 0
+		pl3				= plot(ax, [-.5 -.5], handles.ylim); % vertical line at -.5
+	end
+	
+	handles.pl_handles{iAx}.LineWidth = 1.0;
+	handles.pl_handles{iAx}.Color	= 'k';
+	set(handles.pl_handles{iAx},'HitTest','off') % otherwise those plots will register a button down
+
+	if exist('pl2', 'var')
+		pl2.LineWidth	= .5;
+		pl2.Color		= 'r';
+		set(pl2,'HitTest','off') %... and not our axes
+	end
+	if exist('pl3', 'var')
+		pl3.LineWidth	= .5;
+		pl3.Color		= [.6 .6 .6];
+		set(pl3,'HitTest','off')
 	end
 	
 	% Behavior when clicked
@@ -307,20 +310,21 @@ for iAx = 1:handles.num_axes
 	end
 	
 	% Set some axes properties
-	if tr ~= 0
-		ax.YLim			= handles.ylim;
-		ax.YTickLabel	= '';
+	ax.YLim			= handles.ylim;
+	ax.YTickLabel	= '';
+	if tr ~= 0 && iAx > numel(handles.ax_trial) - 5 && iAx <= numel(handles.ax_trial)
 		if handles.output(handles.ax_trial(iAx))
 			handles.ax_handles{iAx}.Color = handles.color_selected;
 		else
 			handles.ax_handles{iAx}.Color = handles.color_unselected;
 		end
-		if iAx > numel(handles.ax_trial) - 5 && iAx <= numel(handles.ax_trial)
-			ax.XTick		= handles.data.time{tr}(l1)-rem(handles.data.time{tr}(l1),2):2:handles.data.time{tr}(l2)-rem(handles.data.time{tr}(l2),2); % :P
-		else
-			ax.XTick		= [];
-		end
+		ax.XTick		= handles.data.time{tr}(l1)-rem(handles.data.time{tr}(l1),2):2:handles.data.time{tr}(l2)-rem(handles.data.time{tr}(l2),2); % :P
+	elseif iAx > numel(handles.ax_trial) - 5 && iAx <= numel(handles.ax_trial)
+		ax.XTick		= handles.data.time{1}(l1)-rem(handles.data.time{1}(l1),2):2:handles.data.time{1}(l2)-rem(handles.data.time{1}(l2),2); % :P
+	else
+		ax.XTick		= [];
 	end
+	
 	hold(ax, 'off')
 end
 handles.initialpage = false;
