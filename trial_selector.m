@@ -312,12 +312,14 @@ for iAx = 1:handles.num_axes
 	% Set some axes properties
 	ax.YLim			= handles.ylim;
 	ax.YTickLabel	= '';
-	if tr ~= 0 && iAx > numel(handles.ax_trial) - 5 && iAx <= numel(handles.ax_trial)
+	if tr ~= 0
 		if handles.output(handles.ax_trial(iAx))
 			handles.ax_handles{iAx}.Color = handles.color_selected;
 		else
 			handles.ax_handles{iAx}.Color = handles.color_unselected;
 		end
+	end
+	if tr ~= 0 && iAx > numel(handles.ax_trial) - 5 && iAx <= numel(handles.ax_trial)
 		ax.XTick		= handles.data.time{tr}(l1)-rem(handles.data.time{tr}(l1),2):2:handles.data.time{tr}(l2)-rem(handles.data.time{tr}(l2),2); % :P
 	elseif iAx > numel(handles.ax_trial) - 5 && iAx <= numel(handles.ax_trial)
 		ax.XTick		= handles.data.time{1}(l1)-rem(handles.data.time{1}(l1),2):2:handles.data.time{1}(l2)-rem(handles.data.time{1}(l2),2); % :P
