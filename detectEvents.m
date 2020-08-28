@@ -75,6 +75,9 @@ end
 if ~isfield(cfg, 'spi_indiv') % relatively costly computation
 	cfg.spi_indiv		= 0; % if 1, will look for peak between freqs defined in cfg.spi_freq and use +/- cfg.spi_indiv_win instead
 end
+if size(cfg.scoring, 1) == 1 
+	cfg.scoring = cfg.scoring';
+end
 
 % We need channels for estimating the spindle peak (cell array with
 % strings). Results will be averaged over channels (you probably dont want
