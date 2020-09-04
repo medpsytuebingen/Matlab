@@ -8,7 +8,7 @@ function output = detectEvents(cfg, data)
 % .scoring			array of ints; column with one row per scored epoch
 %					(like the first column of SchlafAus output)
 % .scoring_epoch_length	int;	length of scoring epochs in sec
-% .code_nrem		array of ints; NREM stages to use for detection 
+% .code_NREM		array of ints; NREM stages to use for detection 
 %					(usually [2 3 4] for humans, 2 for animals)
 %
 % data				Fieldtrip data structure, should contain a single trial
@@ -512,8 +512,51 @@ for iCh = 1:numel(chan)
 		SOPhase{iCh,1}(iSO,:)	= rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:))));
 		[TmpAmp, SpiAmpIndex]	= max(spi_amp(iCh, NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+(twindow*Fs)));
 		SloSpiCoupling{iCh,1}(iSO,1) = SOPhase{iCh,1}(iSO,SpiAmpIndex);
-	end
+    end
+    
+    % cooccurence based on detetced SOs and spindles
+    %extract SO phase
+    %             SOSpiCoupling{iCh,1} = zeros(size(NegativePeaks{iCh,1},1),1);
+    SOGA{iCh,1} = zeros(size(NegativePeaks{iCh,1},1),5001);
+    SOPhase{iCh,1} = zeros(size(NegativePeaks{iCh,1},1),5001);
+    iSOTmp = 0;
+    for iSO= 1:size(NegativePeaks{iCh,1},1)
+        
+        y = 0;
+        CurrentSpindle = [];
+        for iEpoch = 1: size(spi,1)
+            if size(AllSpindles.FastSpi{iEpoch,iCh},2) >0
+                if size(find(spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) > NegativePeaks{iCh,1}(iSO,1)-2500 & spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) < NegativePeaks{iCh,1}(iSO,1)+2500),2) > 0 && y == 0
+                    y=1;
+                    CurrentSpindle = spi{iEpoch,iCh}(:,(spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) > NegativePeaks{iCh,1}(iSO,1)-2500 & spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) < NegativePeaks{iCh,1}(iSO,1)+2500));
+                end
+            end
+        end
+        
+        
+        
+        
+        if size(output.spi.events{iCh},2) >0
+            if size(find(output.spi.events{iCh} > NegativePeaks{iCh,1}(iSO,1)-2500 & AllSpindles.FastSpi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) < NegativePeaks{iCh,1}(iSO,1)+2500),2) > 0 && y == 0
+                y = 1;
+                CurrentSpindle = spi{iEpoch,iCh}(:,(spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) > NegativePeaks{iCh,1}(iSO,1)-2500 & spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) < NegativePeaks{iCh,1}(iSO,1)+2500));
+            end
+        end
+        
+        
+        if size(CurrentSpindle,2)>0
+            for iSpi = 1:size(CurrentSpindle,2)
+                iSOTmp = iSOTmp + 1;
+                %SOBand should be smoothed or lower high cut!!!
+                SOGA{iCh,1}(iSO,:) =  SOBand(NegativePeaks{iCh,1}(iSO,1)-2500:NegativePeaks{iCh,1}(iSO,1)+2500);
+                SOPhase{iCh,1}(iSO,:) = rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:))));
+                [TmpAmp, SpiAmpIndex] = max(SpiBandAmp(CurrentSpindle(1,iSpi):CurrentSpindle(2,iSpi)));
+                SloSpiCoupling{iCh,1}(iSOTmp,1) = SOPhase{iCh,1}(iSO,SpiAmpIndex);
+            end
+        end
+    end   
 end
+
 
 % add to putput
 output.slo.events				= ZeroCrossings; % up-down, down-up, up-down crossings
