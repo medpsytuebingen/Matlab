@@ -4,15 +4,15 @@ function output = detectEvents(cfg, data)
 % detections.
 %
 % INPUT VARIABLES:
-% cfg				...
-% .scoring			array of ints; column with one row per scored epoch
-%					(like the first column of SchlafAus output)
+% cfg				
+% .scoring						int array; column with one row per scored epoch
+%								(like the first column of SchlafAus output)
 % .scoring_epoch_length	int;	length of scoring epochs in sec
-% .code_nrem		array of ints; NREM stages to use for detection 
-%					(usually [2 3 4] for humans, 2 for animals)
+% .code_nrem					int or int array; NREM stages to use for detection 
+%								(usually [2 3 4] for humans, 2 for animals)
 %
-% data				Fieldtrip data structure, should contain a single trial
-%					Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
+% data							Fieldtrip data structure, should contain a single trial
+%								Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
 %
 % OUTPUT VARIABLES:
 % output            ...
@@ -112,7 +112,7 @@ end
 
 
 %% PREPARATIONS
-chan						= data.label;
+chans						= data.label;
 multi						= cfg.scoring_epoch_length*Fs;
 
 % Compensate that scoring and data don't have the same length
@@ -303,10 +303,10 @@ spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 
 % Detect spindles
-spi = cell(size(NREMEpisodes,2),numel(chan)); % each cell will contain a two-row vector with beginning and ends of detected spindles
+spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
 for iEpoch = 1:size(NREMEpisodes,2)
 	spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
-	for iCh = 1:numel(chan)
+	for iCh = 1:numel(chans)
 		% First threshold criterion
 		% Where does the smoothed envelope cross the threshold?
 		FastSpiAmplitudeTmp = smooth(spi_amp_tmp(iCh, :),0.1 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
@@ -368,8 +368,8 @@ for iEpoch = 1:size(NREMEpisodes,2)
 end
 
 % Calculate spindel density
-spi_dens = cell(1, numel(chan));
-for iCh = 1:numel(chan)
+spi_dens = cell(1, numel(chans));
+for iCh = 1:numel(chans)
 	TotalNumberOfSpi = 0;
 	EpisodeDurations = 0;
 	for iEpoch = 1:size(spi,1)
@@ -386,10 +386,10 @@ output.info.Fs				= Fs;
 output.info.length			= size(data.trial{1},2);
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
-output.info.channel			= chan;
+output.info.channel			= chans;
 output.NREMepisode			= NREMEpisodes;
 output.REMepisode			= REMEpisodes;
-output.spi.events			= cell(numel(chan), 1);
+output.spi.events			= cell(numel(chans), 1);
 for iCh = 1:size(spi, 2)
 	output.spi.events{iCh} = [spi{:,iCh}];
 end
@@ -413,8 +413,8 @@ slo_std				= std(slo_raw(:,any(scoring_fine==cfg.code_NREM,2))');
 slo_mean			= mean(abs(slo_raw(:,any(scoring_fine==cfg.code_NREM,2))'));
 
 % Find negative amplitudes bigger than Threshold
-SOEpisodes = cell(numel(chan),1);
-for iCh = 1:numel(chan)
+SOEpisodes = cell(numel(chans),1);
+for iCh = 1:numel(chans)
 	SoThreshold = slo_mean(iCh) + cfg.slo_thr * slo_std(iCh);
 	for iEpoch = 1:size(NREMEpisodes,2)
 		% Find potential SOs ('episodes')
@@ -438,8 +438,8 @@ for iCh = 1:numel(chan)
 end
 
 % Check for further characteristics based on zero crossings
-ZeroCrossings = cell(numel(chan),1);
-for iCh = 1:numel(chan)
+ZeroCrossings = cell(numel(chans),1);
+for iCh = 1:numel(chans)
 	ZeroCrossings{iCh,1} = zeros(3,size(SOEpisodes{iCh,1},2));
 	for iEvent = 1:size(SOEpisodes{iCh,1},2)
 		X = 0;  % marker for left zero crossing found
