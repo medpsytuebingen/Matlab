@@ -7,7 +7,7 @@ Example code to call these functions:
 ```Matlab
   cfg	= [];
   cfg.scoring = scoring;
-  cfg.scoring_epoch_length	= 30; % length of one scoring epoch in s
+  cfg.scoring_epoch_length = 30; % length of one scoring epoch in s
   cfg.code_NREM = [2 3 4]; % code used in hyp for NREM stages
   cfg.code_REM = 5; % ...and for REM stages (can also be an array)
   cfg.code_WAKE	= 0;
@@ -21,8 +21,8 @@ Example code to call these functions:
   cfg.spi_indiv_chan = {'C3', 'C4'};
 
   cfg.slo_thr	= 2;
-  cfg.slo_dur_min	= 0.8;
-  cfg.slo_dur_max	= 2;
+  cfg.slo_dur_min = 0.8;
+  cfg.slo_dur_max = 2;
   cfg.slo_freq = [0.1 3.5];
   output = detectEvents(cfg, data);
   plotDetectedEvents(output) 
