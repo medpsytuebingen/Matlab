@@ -111,6 +111,9 @@ if ~isfield(cfg, 'slo_filt_ord')
 	cfg.slo_filt_ord			= 3;
 end
 
+% Start filling the output
+output						= [];
+output.info.cfg				= cfg;
 
 %% PREPARATIONS
 chans						= data.label;
@@ -293,8 +296,10 @@ cfg_pp				= [];
 cfg_pp.bpfilter		= 'yes';
 if cfg.spi_indiv
 	cfg_pp.bpfreq	= spi_freq_indiv;
+	output.spi.freq = spi_freq_indiv;
 else
 	cfg_pp.bpfreq	= cfg.spi_freq;
+	output.spi.freq = cfg.spi_freq;
 end
 cfg_pp.bpfiltord	= cfg.spi_filt_ord;
 data_spi			= ft_preprocessing(cfg_pp, data);
@@ -317,7 +322,7 @@ for iEpoch = 1:size(NREMEpisodes,2)
 		SpiBeginning =  strfind(isLongEnough',[0 1]); %find spindle Beginning line before compensates that it find last 0
 		SpiEnd = strfind(isLongEnough',[1 0])-1; %find spindle Ending subtract 1 because of added 0 in the beginning
 		
-		% 		% Some plots for debugging
+		% Some plots for debugging
 		if cfg.debugging
 			win = 1:5000;
 			spi_raw = data_spi.trial{1}(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
@@ -382,7 +387,6 @@ for iCh = 1:numel(chans)
 end
 
 % Fill the output
-output						= [];
 output.info.Fs				= Fs;
 output.info.length			= size(data.trial{1},2);
 output.info.scoring			= cfg.scoring;
