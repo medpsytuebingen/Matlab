@@ -2,8 +2,9 @@
 Matlab scripts commonly used in the Institute of Medical Psychology Tuebingen
 
 `detectEvents` / `plotDetectedEvents`  
-Detect spindles and slow oscillations in fieldtrip data structures.
-  Example code to call these functions:
+Detect spindles and slow oscillations in fieldtrip data structures.  
+Example code to call these functions:   
+```Matlab
   cfg							      = [];
   cfg.scoring					  = scoring;
   cfg.scoring_epoch_length	= 30; % length of one scoring epoch in s
@@ -24,7 +25,11 @@ Detect spindles and slow oscillations in fieldtrip data structures.
   cfg.slo_dur_max				= 2;
   cfg.slo_freq				  = [0.1 3.5];
   output						  = detectEvents(cfg, data);
-  plotDetectedEvents(output)
+  plotDetectedEvents(output) ```
+
+The output should look something like this:
+![Example OUtput](images/output_plotDetectedEvents.png)
+
 
 `get_filenames`  
 Returns a properly sorted list of files in a given folder (excluding subfolders, mac trash files etc.) or one filename starting with a matching string or the filename of the nth file in that folder.
