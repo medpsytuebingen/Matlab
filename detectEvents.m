@@ -4,15 +4,15 @@ function output = detectEvents(cfg, data)
 % detections.
 %
 % INPUT VARIABLES:
-% cfg				...
-% .scoring			array of ints; column with one row per scored epoch
-%					(like the first column of SchlafAus output)
+% cfg
+% .scoring						int array; column with one row per scored epoch
+%								(like the first column of SchlafAus output)
 % .scoring_epoch_length	int;	length of scoring epochs in sec
-% .code_NREM		array of ints; NREM stages to use for detection 
-%					(usually [2 3 4] for humans, 2 for animals)
+% .code_NREM					int or int array; NREM stages to use for detection
+%								(usually [2 3 4] for humans, 2 for animals)
 %
-% data				Fieldtrip data structure, should contain a single trial
-%					Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
+% data							Fieldtrip data structure, should contain a single trial
+%								Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
 %
 % OUTPUT VARIABLES:
 % output            ...
@@ -27,6 +27,7 @@ function output = detectEvents(cfg, data)
 % . Turn theta detection into a generic detection (e.g. for alpha and
 % ripples)
 % . describe input and output in documentation
+% . add dataset information to .info
 %
 % AUTHORS:
 % Niels Niethard, niels.niethard@medizin.uni-tuebingen.de
@@ -75,17 +76,17 @@ end
 if ~isfield(cfg, 'spi_indiv') % relatively costly computation
 	cfg.spi_indiv		= 0; % if 1, will look for peak between freqs defined in cfg.spi_freq and use +/- cfg.spi_indiv_win instead
 end
-if size(cfg.scoring, 1) == 1 
+if size(cfg.scoring, 1) == 1
 	cfg.scoring = cfg.scoring';
 end
 
 % We need channels for estimating the spindle peak (cell array with
 % strings). Results will be averaged over channels (you probably dont want
 % to mix frontal and central channels for this).
-if cfg.spi_indiv == 1 && (~isfield(cfg, 'spi_indiv_chan') || isempty(cfg.spi_indiv_chan)) 
+if cfg.spi_indiv == 1 && (~isfield(cfg, 'spi_indiv_chan') || isempty(cfg.spi_indiv_chan))
 	error('If you want individual spindle peak magic, you gotta provide a channel to use.')
 end
-if cfg.spi_indiv == 1 && ~isfield(cfg, 'spi_indiv_win') 
+if cfg.spi_indiv == 1 && ~isfield(cfg, 'spi_indiv_win')
 	cfg.spi_indiv_win = 2; % signal will be filtered +/- spi_indiv_win around individual spindle peak frequency
 end
 % if ~isfield(cfg, 'the_freq')
@@ -112,7 +113,7 @@ end
 
 
 %% PREPARATIONS
-chan						= data.label;
+chans						= data.label;
 multi						= cfg.scoring_epoch_length*Fs;
 
 % Compensate that scoring and data don't have the same length
@@ -204,7 +205,7 @@ if cfg.spi_indiv
 	% Perform spectral analysis (both IRASA fractal component and regular spectrum)
 	cfg_tmp				= [];
 	cfg_tmp.foi			= cfg.spi_freq(1):0.1:cfg.spi_freq(2); % .1 Hz sampling should be fine
-% 	cfg_tmp.foi			= 0.5:0.1:20; % .1 Hz sampling should be fine
+	% 	cfg_tmp.foi			= 0.5:0.1:20; % .1 Hz sampling should be fine
 	
 	cfg_tmp.taper		= 'hanning';
 	cfg_tmp.pad			= 'nextpow2';
@@ -303,10 +304,10 @@ spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 
 % Detect spindles
-spi = cell(size(NREMEpisodes,2),numel(chan)); % each cell will contain a two-row vector with beginning and ends of detected spindles
+spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
 for iEpoch = 1:size(NREMEpisodes,2)
 	spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
-	for iCh = 1:numel(chan)
+	for iCh = 1:numel(chans)
 		% First threshold criterion
 		% Where does the smoothed envelope cross the threshold?
 		FastSpiAmplitudeTmp = smooth(spi_amp_tmp(iCh, :),0.1 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
@@ -368,8 +369,8 @@ for iEpoch = 1:size(NREMEpisodes,2)
 end
 
 % Calculate spindel density
-spi_dens = cell(1, numel(chan));
-for iCh = 1:numel(chan)
+spi_dens = cell(1, numel(chans));
+for iCh = 1:numel(chans)
 	TotalNumberOfSpi = 0;
 	EpisodeDurations = 0;
 	for iEpoch = 1:size(spi,1)
@@ -386,10 +387,10 @@ output.info.Fs				= Fs;
 output.info.length			= size(data.trial{1},2);
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
-output.info.channel			= chan;
+output.info.channel			= chans;
 output.NREMepisode			= NREMEpisodes;
 output.REMepisode			= REMEpisodes;
-output.spi.events			= cell(numel(chan), 1);
+output.spi.events			= cell(numel(chans), 1);
 for iCh = 1:size(spi, 2)
 	output.spi.events{iCh} = [spi{:,iCh}];
 end
@@ -413,8 +414,8 @@ slo_std				= std(slo_raw(:,any(scoring_fine==cfg.code_NREM,2))');
 slo_mean			= mean(abs(slo_raw(:,any(scoring_fine==cfg.code_NREM,2))'));
 
 % Find negative amplitudes bigger than Threshold
-SOEpisodes = cell(numel(chan),1);
-for iCh = 1:numel(chan)
+SOEpisodes = cell(numel(chans),1);
+for iCh = 1:numel(chans)
 	SoThreshold = slo_mean(iCh) + cfg.slo_thr * slo_std(iCh);
 	for iEpoch = 1:size(NREMEpisodes,2)
 		% Find potential SOs ('episodes')
@@ -438,8 +439,8 @@ for iCh = 1:numel(chan)
 end
 
 % Check for further characteristics based on zero crossings
-ZeroCrossings = cell(numel(chan),1);
-for iCh = 1:numel(chan)
+ZeroCrossings = cell(numel(chans),1);
+for iCh = 1:numel(chans)
 	ZeroCrossings{iCh,1} = zeros(3,size(SOEpisodes{iCh,1},2));
 	for iEvent = 1:size(SOEpisodes{iCh,1},2)
 		X = 0;  % marker for left zero crossing found
@@ -473,9 +474,9 @@ for iCh = 1:numel(chan)
 	
 	% Hot fix (delete this if above version is fixed): - probably not
 	% needed...
-% 	tmp1 = (ZeroCrossings{iCh,1}(1,:));
-% 	tmp2 = (ZeroCrossings{iCh,1}(2,:));
-% 	tmp3 = (ZeroCrossings{iCh,1}(3,:));
+	% 	tmp1 = (ZeroCrossings{iCh,1}(1,:));
+	% 	tmp2 = (ZeroCrossings{iCh,1}(2,:));
+	% 	tmp3 = (ZeroCrossings{iCh,1}(3,:));
 	
 	ZeroCrossings{iCh,1} = [tmp1; tmp2; tmp3];
 	
@@ -493,80 +494,66 @@ for iCh = 1:numel(chan)
 	ZeroCrossings{iCh,1}(:,Peak2PeakAmp{iCh,1}<0.07) = [];
 	Peak2PeakAmp{iCh,1}(Peak2PeakAmp{iCh,1}<0.07,:) = [];
 	
-	%find negative peaks
+	% Find negative peaks
 	NegativePeaks{iCh,1} = zeros(size(ZeroCrossings{iCh,1},2),1);
 	for iEvent = 1: size(ZeroCrossings{iCh,1},2)
 		[M,I] = min(slo_raw(iCh, ZeroCrossings{iCh,1}(1,iEvent):ZeroCrossings{iCh,1}(2,iEvent)),[],2);
 		NegativePeaks{iCh,1}(iEvent,1) = ZeroCrossings{iCh,1}(1,iEvent)+I;
 	end
 	
-	% Extract SO phase (eigentlich Delta)
-	% !! Niels: Funktioniert schon so, phase fluktuiert aber noch stark wegen
-	% hoher cutoff-Frequenz
-	twindow						= 2.5; % data will be +/- twindow
-	SloSpiCoupling{iCh,1}		= zeros(size(NegativePeaks{iCh,1},1),1);
-	SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),(twindow*2*Fs + 1));
-	SOPhase{iCh,1}				= zeros(size(NegativePeaks{iCh,1},1),(twindow*2*Fs + 1));
-	for iSO= 1:size(NegativePeaks{iCh,1},1)
-		SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+(twindow*Fs));
-		SOPhase{iCh,1}(iSO,:)	= rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:))));
-		[TmpAmp, SpiAmpIndex]	= max(spi_amp(iCh, NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+(twindow*Fs)));
-		SloSpiCoupling{iCh,1}(iSO,1) = SOPhase{iCh,1}(iSO,SpiAmpIndex);
-    end
-    % cooccurence based on detetced SOs and spindles
-    %extract SO phase
-    %             SOSpiCoupling{iCh,1} = zeros(size(NegativePeaks{iCh,1},1),1);
-    SOGA{iCh,1} = zeros(size(NegativePeaks{iCh,1},1),5001);
-    SOPhase{iCh,1} = zeros(size(NegativePeaks{iCh,1},1),5001);
-    iSOTmp = 0;
-    for iSO= 1:size(NegativePeaks{iCh,1},1)
-        
-        y = 0;
-                CurrentSpindle = [];
-                for iEpoch = 1: size(spi,1)
-                    if size(AllSpindles.FastSpi{iEpoch,iCh},2) >0
-                        if size(find(spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) > NegativePeaks{iCh,1}(iSO,1)-2500 & spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) < NegativePeaks{iCh,1}(iSO,1)+2500),2) > 0 && y == 0
-                            y=1;
-                            CurrentSpindle = spi{iEpoch,iCh}(:,(spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) > NegativePeaks{iCh,1}(iSO,1)-2500 & spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) < NegativePeaks{iCh,1}(iSO,1)+2500));                           
-                        end
-                    end
-                end
-        
-        
-        
-        
-            if size(output.spi.events{iCh},2) >0
-                if size(find(output.spi.events{iCh} > NegativePeaks{iCh,1}(iSO,1)-2500 & AllSpindles.FastSpi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) < NegativePeaks{iCh,1}(iSO,1)+2500),2) > 0 && y == 0
-                    y = 1;
-                    CurrentSpindle = spi{iEpoch,iCh}(:,(spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) > NegativePeaks{iCh,1}(iSO,1)-2500 & spi{iEpoch,iCh}(1,:)*((ihour-1)*60*60*Fs+1) < NegativePeaks{iCh,1}(iSO,1)+2500));
-                end
-            end
-        
-       
-        if size(CurrentSpindle,2)>0
-            for iSpi = 1:size(CurrentSpindle,2)
-                iSOTmp = iSOTmp + 1;
-                SOGA{iCh,1}(iSO,:) =  SOBand(NegativePeaks{iCh,1}(iSO,1)-2500:NegativePeaks{iCh,1}(iSO,1)+2500);
-                SOPhase{iCh,1}(iSO,:) = rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:))));
-                [TmpAmp, SpiAmpIndex] = max(SpiBandAmp(CurrentSpindle(1,iSpi):CurrentSpindle(2,iSpi)));
-                SloSpiCoupling{iCh,1}(iSOTmp,1) = SOPhase{iCh,1}(iSO,SpiAmpIndex);
-            end
-        end
-    end
-  
+	% SO-spindle coupling
+	if size(output.spi.events{iCh},2) > 0 % if there are spindles in this channel
+		% Method 1: Extract SO phase at point of peak amplitude in spindle
+		% band (Randolph method) - might fluctuate much and might require
+		% more smoothing
+		% ...also creates SO waveforms
+		twindow						= 2.5; % data will be +/- twindow
+		SloSpiAmpCoupling{iCh,1}	= [];
+		SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),(twindow*2*Fs + 1));
+		SOPhase						= [];
+		for iSO = 1:size(NegativePeaks{iCh,1},1)
+			SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+(twindow*Fs));
+			SOPhase					= rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:))));
+			[~, SpiAmpIndex]		= max(spi_amp(iCh, NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+(twindow*Fs))); % spindle maximum amp in samples from SO window start
+			SloSpiAmpCoupling{iCh,1}(iSO,1) = SOPhase(SpiAmpIndex);
+		end
+		
+		% Method 2: Extract SO phase based on spindle detection
+		SloSpiDetCoupling{iCh,1}	= [];
+		SOPhase						= [];
+		cnt							= 1;
+		for iSO = 1:size(NegativePeaks{iCh,1},1)
+			spi_cur = [];
+			% If there is a spindle fully inside SO plus minus time
+			% window
+			spi_ind = find(output.spi.events{iCh}(1,:) > NegativePeaks{iCh,1}(iSO,1)-twindow*Fs & output.spi.events{iCh}(2,:) < NegativePeaks{iCh,1}(iSO,1)+twindow*Fs);
+			if size(spi_ind,2) > 0 % if at least one spindle was found
+				spi_cur = output.spi.events{iCh}(:,spi_ind);
+			end
+			for iSpi = 1:size(spi_cur,2)
+				SOPhase = rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:)))); % SO phase along entire window
+				[~, SpiAmpIndex] = max(spi_amp(iCh, spi_cur(1,iSpi):spi_cur(2,iSpi))); % find spindle maximum amp (samples from spindle start)
+				tmp = spi_cur(1,iSpi) + SpiAmpIndex - 1; % spindle maximum amp in global samples
+				tmp = tmp - (NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs)); % spindle maximum amp in samples from SO window start
+				SloSpiDetCoupling{iCh,1}(cnt,1) = SOPhase(tmp); % note down phase there
+				cnt = cnt + 1;
+			end
+		end
+	end
 end
 
 % add to putput
 output.slo.events				= ZeroCrossings; % up-down, down-up, up-down crossings
 output.slo.neg_peaks			= NegativePeaks;
 output.slo.waveform				= SOGA;
-output.SloSpiCoupling			= SloSpiCoupling; % based on spindle power maximum around each slow wave
+output.SloSpiAmpCoupling		= SloSpiAmpCoupling; % based on spindle amplitude maximum around each slow wave
+output.SloSpiDetCoupling		= SloSpiDetCoupling; % similar to above but only if a spindle event was detected
 
 % clear data_slo SOEpisodes NegativePeaks SOGA slo_raw slo_std slo_mean
 
 return % only tested up to here
 
-%% Theta
+%% Theta - TODO
 %calculated theta power during REM
 ThetaBand = zeros(size(data,1),3);
 ThetaAmp = zeros(size(data,1),3);
@@ -587,62 +574,4 @@ output.scoring					= scoring_fine;
 output.REMThetaEnergy			= REMThetaEnergy;
 output.REMThetaMeanAmp			= REMThetaMeanAmp;
 
-%     save(strcat(DirSave,'DetectedEvents',AnimalName{iAnimal,1}),'AllSpindles','SOGA','SOSpiCoupling','NREMEpisodes','REMEpisodes','SleepScoring','REMThetaEnergy','REMThetaMeanAmp','-v7.3');
-%        save(strcat(DirSave,'DetectedEvents',AnimalName{iAnimal,1}),'','-v7.3');
-
 clear SOGA SOPhase SOSpiCoupling REMThetaMeanAmp REMThetaEnergy spi_amp
-
-%% ??
-
-
-iCh = 3;
-GoodSpiIndex = 0;
-for iEpoch = 1:size(AllSpindles.fast,1)
-	CurrentSpindles = AllSpindles.fast{iEpoch,iCh};
-	for iSpi = 1: size (CurrentSpindles,2)
-		
-		DataTmpSpi = SpiBand(CurrentSpindles(1,iSpi)-5000:CurrentSpindles(2,iSpi)+5000,iCh); %get filteres spindle signal for eachspindle + - 5sec
-		FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
-		
-		above_threshold = FastSpiAmplitudeTmp(5000:end-5000) > SpindleThreshold(2,1)*SpiAmpSTD(iCh);
-		isLongEnough = bwareafilt(above_threshold, [250, MaxSpiDuration]); %find spindle within duration range
-		above_Max = FastSpiAmplitudeTmp(5000:end-5000) > SpindleThreshold(3,1)*SpiAmpSTD(iCh);
-		MaxIsThere = bwareafilt(above_Max, [1, MaxSpiDuration]); %find spindle within duration range
-		[pks,locs] = findpeaks(DataTmpSpi(5000:end-5000,1),'MinPeakProminence',1.5*SpiAmpSTD(iCh));
-		if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
-			GoodSpiIndex = GoodSpiIndex+1;
-			subplot(2,1,1)
-			DataTmp = data(CurrentSpindles(1,iSpi)-5000:CurrentSpindles(1,iSpi)+5000,iCh);
-			plot(DataTmp);
-			ylim([-0.5 0.5]);
-			subplot(2,1,2)
-			DataTmp = filtfilt(SpiFilterHigh1,SpiFilterHigh2,DataTmp);
-			DataTmp = filtfilt(SpiFilterLow1,SpiFilterLow2,DataTmp);
-			plot(DataTmp);
-			hold all
-			DataTmp = smooth(abs(hilbert(DataTmp)),40);
-			plot(DataTmp);
-			%yline(5*FastSpiSTD);
-			%yline(2.5*FastSpiSTD);
-			yline(2.0*SpiAmpSTD(iCh));
-			yline(1.5*SpiAmpSTD(iCh));
-			yline(3*SpiAmpSTD(iCh));
-			ylim([-0.3 0.3]);
-			hold off
-			waitforbuttonpress
-		end
-		
-	end
-	
-end
-
-
-for iCh=1:3
-	gradBin     = 360/10;
-	figure
-	obj2                    = CircHist(SloSpiCoupling{iCh,1},gradBin);
-	obj2.colorBar           = 'k';  % change color of bars
-	obj2.avgAngH.LineStyle  = '--'; % make average-angle line dashed
-	obj2.avgAngH.LineWidth  = 3; % make average-angle line thinner
-	obj2.colorAvgAng        = [1 0.5 0.5]; % change average-angle line color
-end
