@@ -5,13 +5,41 @@ function output = detectEvents(cfg, data)
 %
 % INPUT VARIABLES:
 % cfg
-% .scoring						int array; column with one row per scored epoch
-%								(like the first column of SchlafAus output)
-% .scoring_epoch_length	int;	length of scoring epochs in sec
-% .code_NREM					int or int array; NREM stages to use for detection
+% .scoring						int array (num_epochs x 1)
+% .scoring_epoch_length			int; length of scoring epochs in sec
+% .code_NREM					int or int array; NREM sleep stages to use for detection
 %								(usually [2 3 4] for humans, 2 for animals)
-%
-% data							Fieldtrip data structure, should contain a single trial
+% .code_REM						same for REM sleep
+% .code_WAKE					same for wake 
+% .artfctdef					artifacts, either a) as an array (num_arts
+%								x 2), each row providing [startsample endsample]
+% 								of one artifact window, or b) for the lazy
+% 								user, artifact definitions as returned by
+% 								fieldtrip artifact functions, e.g.
+% 								cfg.artfctdef.visual.artifact =	[234 242; 52342 65234];
+%								cfg.artfctdef.zvalue.artifact =	[111 222]; ..and so on.
+%								Data in these artifactual time windows will
+%								not be used. Artifacts may be overlapping.
+% .artfctpad					padding (in sec) of segments before and after
+%								each artifact to discard (default: 0.5)
+% .spi_freq						frequency range for spindle detection
+%								(default: [12 16]); if cfg.spi_indiv == 1,
+%								this will be the range in which the
+%								individual spindle frequency peak is
+%								termined; filtering range will then be +/-
+%								cfg.spi_indiv_win
+% .spi_indiv					logical; turns on the use of individual
+%								spindle peak frequencies (calculated within
+%								time window provided in *** and on IRASA-
+%								computed oscillatory component); default: 0
+% .cfg.spi_indiv_win			int (in Hz); signal will be filtered +/-
+%								spi_indiv_win around individual spindle
+%								peak frequency (default: 2)
+% .spi_indiv_chan				cell array with string; channels for
+%								estimating spindle peak frequency; you
+%								probably dont want to mix frontal and
+%								central channels here
+% data							Fieldtrip raw data structure, should contain a single trial
 %								Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
 %
 % OUTPUT VARIABLES:
@@ -19,19 +47,22 @@ function output = detectEvents(cfg, data)
 %
 %
 % Todo:
-% . deal with artifacts in fieldtrip annotation
 % . also add a hypno function (adding for each sample the sleep stage) + a
 % function that tells you for each sample whether its solid in a sleep
 % stage: isStage(FT-Structure, sample, boundary_in_sec)
 % . Polaritaet checkcen (EEG vs. invasive)
-% . Turn theta detection into a generic detection (e.g. for alpha and
-% ripples)
 % . describe input and output in documentation
 % . add dataset information to .info
+% . slow spindles 8-12 hz
+% . rework variable naming inside function and output
+% . rework output: all data in one row per channel, also per ep and for
+% entire recording
+% . implement hongi's ripple search for alpha / ripples?
+% . add from hongis code: merging of close events?
 %
 % AUTHORS:
 % Niels Niethard, niels.niethard@medizin.uni-tuebingen.de
-% (Jens Klinzing, klinzing@princeton.edu)
+% Jens Klinzing, klinzing@princeton.edu
 
 %% INPUT VALIDATION AND SETUP
 % Check for required fields in cfg
@@ -45,7 +76,7 @@ end
 % Check data
 if length(data.trial) ~= 1, error('Function only accepts single-trial data.'), end
 if any(size(data.sampleinfo) ~= [1 2]), error('Sampleinfo looks like data does not contain exactly one trial.'), end
-Fs					= data.fsample;
+Fs = data.fsample;
 
 % Set default values
 if ~isfield(cfg, 'debugging')
@@ -65,10 +96,7 @@ elseif isfield(cfg, 'spi_thr') && length(cfg.spi_thr) ~= 3
 	error('Spindle thresholds not provided properly (should be 3x1 vector in cfg.spi_thr).')
 end
 if ~isfield(cfg, 'spi_freq')
-	cfg.spi_freq				= [10 18]; % Hz; filtering range for spindle detection
-	% if cfg.spi_indiv == 1, this will be the range in which the individual
-	% spindle frequency peak is termined; filtering range will then be this
-	% frequency +/- cfg.spi_indiv_win
+	cfg.spi_freq				= [12 16]; % Hz; filtering range for spindle detection
 end
 if ~isfield(cfg, 'spi_filt_ord')
 	cfg.spi_filt_ord			= 6;
@@ -79,22 +107,21 @@ end
 if size(cfg.scoring, 1) == 1
 	cfg.scoring = cfg.scoring';
 end
-
-% We need channels for estimating the spindle peak (cell array with
-% strings). Results will be averaged over channels (you probably dont want
-% to mix frontal and central channels for this).
+if isfield(cfg, 'artfctdef') && ~isfield(cfg, 'artfctpad')
+	cfg.artfctpad = 0.5;
+end
 if cfg.spi_indiv == 1 && (~isfield(cfg, 'spi_indiv_chan') || isempty(cfg.spi_indiv_chan))
-	error('If you want individual spindle peak magic, you gotta provide a channel to use.')
+	error('If you want individual spindle peak magic, you gotta provide the channels to use.')
 end
 if cfg.spi_indiv == 1 && ~isfield(cfg, 'spi_indiv_win')
 	cfg.spi_indiv_win = 2; % signal will be filtered +/- spi_indiv_win around individual spindle peak frequency
 end
-% if ~isfield(cfg, 'the_freq')
-% 	cfg.the_freq				= [5 10];
-% end
-% if ~isfield(cfg, 'the_filt_ord')
-% 	cfg.the_filt_ord			= 3;
-% end
+if ~isfield(cfg, 'the_freq')
+	cfg.the_freq				= [4 8];
+end
+if ~isfield(cfg, 'the_filt_ord')
+	cfg.the_filt_ord			= 6;
+end
 if ~isfield(cfg, 'slo_dur_min')
 	cfg.slo_dur_min				= 0.5; % in s
 end
@@ -114,16 +141,36 @@ end
 % Start filling the output
 output						= [];
 output.info.cfg				= cfg;
+output.info.Fs				= Fs;
+output.info.length			= size(data.trial{1},2);
+output.info.scoring			= cfg.scoring;
+output.info.scoring_epoch_length = cfg.scoring_epoch_length;
+output.slo					= [];
+output.the					= [];
+output.spi					= [];
 
 %% PREPARATIONS
 chans						= data.label;
 multi						= cfg.scoring_epoch_length*Fs;
 
-% Compensate that scoring and data don't have the same length
+% Extract artifact time windows in case they are provided in fieldtrip
+% format
+if isfield(cfg, 'artfctdef')
+	if isstruct(cfg.artfctdef)
+		fnames = fieldnames(cfg.artfctdef);
+		tmp = [];
+		for iFn = 1:numel(fnames)
+			tmp = [tmp; cfg.artfctdef.(fnames{iFn}).artifact];
+		end
+		cfg.artfctdef = tmp;
+	end
+end
+
+% Compensate if scoring and data don't have the same length
 tmp_diff					= size(data.trial{1},2) - length(cfg.scoring)*multi;
 if tmp_diff < 0 % this should not happen or only be -1
-	warning(['Scoring is shorter than data by ' num2str(tmp_diff * -1) ' sample(s).'])
-elseif tmp_diff > 0 % scoring is shorter than data (happens with SchlafAUS)
+	warning(['Data is shorter than scoring by ' num2str(tmp_diff * -1) ' sample(s). Will act as if I hadn''t seen this.'])
+elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS)
 	data.trial{1}(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
 	data.sampleinfo(2) = data.sampleinfo(2) - tmp_diff;
@@ -135,6 +182,30 @@ scoring_fine	= zeros(size(data.trial{1},2),1);
 for iEp = 1:length(cfg.scoring)
 	scoring_fine((iEp-1)*multi+1 : (iEp)*multi) = cfg.scoring(iEp);
 end
+output.info.scoring_fine	= scoring_fine; % Let's return the scoring without artifacts
+
+% Mark artifacts in sleep scoring
+if isfield(cfg, 'artfctdef')
+	warning('Artifact handling is new and should be double-checked.')
+	for iArt = 1:size(cfg.artfctdef, 1)
+		a_beg = cfg.artfctdef(iArt, 1) -  cfg.artfctpad*Fs;
+		if a_beg < 1 % padding shouldnt go to far
+			a_beg = 1; 
+		end
+		if cfg.artfctdef(iArt, 2) > length(scoring_fine)
+			error(['Artifact ' num2str(iArt) ' extends outside the data.'])
+		end
+		a_end = cfg.artfctdef(iArt, 2) +  cfg.artfctpad*Fs;
+		if a_end > length(scoring_fine) % shouldnt be too long also after padding
+			a_end = length(scoring_fine);
+		end
+		scoring_fine(a_beg:a_end) = 99;
+	end
+end
+
+
+output.info.scoring_artsrem	= scoring_fine;
+% also return scoring with artifacts removed
 
 % Extract episodes (save in seconds)
 % NREM
@@ -172,6 +243,12 @@ if cfg.scoring(end,1) == cfg.code_WAKE
 	WAKEndEpisode = [WAKEndEpisode length(cfg.scoring)];
 end
 WAKEpisodes = [(WAKBegEpisode-1)*cfg.scoring_epoch_length+1; WAKEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
+
+% Fill the output
+output.info.channel			= chans;
+output.NREMepisode			= NREMEpisodes;
+output.REMepisode			= REMEpisodes;
+output.WAKEpisodes			= WAKEpisodes;
 
 %% Spindles
 % Find individual spindle peaks
@@ -305,8 +382,8 @@ cfg_pp.bpfiltord	= cfg.spi_filt_ord;
 data_spi			= ft_preprocessing(cfg_pp, data);
 
 spi_amp				= abs(hilbert(data_spi.trial{1}'))'; % needs to be transposed for hilbert, then transposed back...
-spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
+spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 
 % Detect spindles
 spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
@@ -374,7 +451,7 @@ for iEpoch = 1:size(NREMEpisodes,2)
 end
 
 % Calculate spindel density
-spi_dens = cell(1, numel(chans));
+output.spi.density = zeros(numel(chans),1);
 for iCh = 1:numel(chans)
 	TotalNumberOfSpi = 0;
 	EpisodeDurations = 0;
@@ -383,25 +460,17 @@ for iCh = 1:numel(chans)
 		TotalNumberOfSpi = TotalNumberOfSpi +size(CurrentSpindles,2);
 		EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEpoch)-NREMEpisodes(1,iEpoch);
 	end
-	spi_dens{iCh} = TotalNumberOfSpi/(EpisodeDurations/60); %spindle density in spindles per minute
+	output.spi.density(iCh) = TotalNumberOfSpi/(EpisodeDurations/60); %spindle density in spindles per minute
 end
 
 % Fill the output
-output.info.Fs				= Fs;
-output.info.length			= size(data.trial{1},2);
-output.info.scoring			= cfg.scoring;
-output.info.scoring_epoch_length = cfg.scoring_epoch_length;
-output.info.channel			= chans;
-output.NREMepisode			= NREMEpisodes;
-output.REMepisode			= REMEpisodes;
 output.spi.events			= cell(numel(chans), 1);
 for iCh = 1:size(spi, 2)
 	output.spi.events{iCh} = [spi{:,iCh}];
 end
-output.spi.eventsByNREMepisode	= spi';
+output.spi.events_perNREMep	= spi';
 output.spi.amp_std			= spi_amp_std;
 output.spi.amp_mean			= spi_amp_mean;
-output.spi.dens				= spi_dens;
 
 clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
 
@@ -555,27 +624,29 @@ output.SloSpiDetCoupling		= SloSpiDetCoupling; % similar to above but only if a 
 
 % clear data_slo SOEpisodes NegativePeaks SOGA slo_raw slo_std slo_mean
 
-return % only tested up to here
-
 %% Theta - TODO
 %calculated theta power during REM
-ThetaBand = zeros(size(data,1),3);
-ThetaAmp = zeros(size(data,1),3);
-for iCh = 1:3
-	ThetaBand(:,iCh) = filtfilt(ThetaFilterHigh1,ThetaFilterHigh2,data(:,iCh));
-	ThetaBand(:,iCh) = filtfilt(ThetaFilterLow1,ThetaFilterLow2,ThetaBand(:,iCh));
-	ThetaAmp(:,iCh) = abs(hilbert(ThetaBand(:,iCh)));
-end
+cfg_pp				= [];
+cfg_pp.bpfilter		= 'yes';
+cfg_pp.bpfreq		= cfg.the_freq;
+cfg_pp.bpfiltord	= cfg.the_filt_ord;
+data_the			= ft_preprocessing(cfg_pp, data);
+output.the.freq		= cfg.the_freq;
+
+the_raw				= data_the.trial{1};
+the_amp				= abs(hilbert(the_raw'))'; % needs to be transposed for hilbert, then transposed back...
+
+output.the.amp_sum	= sum(the_amp(:,any(scoring_fine==cfg.code_REM,2))');
+output.the.amp_mean = mean(the_amp(:,any(scoring_fine==cfg.code_REM,2))');
+output.the.amp_std	= std(the_amp(:,any(scoring_fine==cfg.code_REM,2))');
+
+output.the.amp_mean_perREMep	= {};
+output.the.amp_sum_perREMep		= {};
 for iEpoch = 1:size(REMEpisodes,2)
-	for iCh = 1:3
-		REMThetaMeanAmp{iCh,1}(iEpoch,1) = mean(ThetaAmp(REMEpisodes(1,iEpoch):REMEpisodes(2,iEpoch),iCh));
-		REMThetaEnergy{iCh,1}(iEpoch,1) = sum(ThetaAmp(REMEpisodes(1,iEpoch):REMEpisodes(2,iEpoch),iCh));
+	for iCh = 1:numel(chans)
+		output.the.amp_mean_perREMep{iCh,1}(iEpoch,1) = mean(the_amp(iCh, REMEpisodes(1,iEpoch):REMEpisodes(2,iEpoch)));
+		output.the.amp_sum_perREMep{iCh,1}(iEpoch,1) = sum(the_amp(iCh, REMEpisodes(1,iEpoch):REMEpisodes(2,iEpoch)));
 	end
 end
 
-
-output.scoring					= scoring_fine;
-output.REMThetaEnergy			= REMThetaEnergy;
-output.REMThetaMeanAmp			= REMThetaMeanAmp;
-
-clear SOGA SOPhase SOSpiCoupling REMThetaMeanAmp REMThetaEnergy spi_amp
+% clear SOGA SOPhase SOSpiCoupling REMThetaMeanAmp REMThetaEnergy spi_amp
