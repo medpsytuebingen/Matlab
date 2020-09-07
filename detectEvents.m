@@ -43,6 +43,7 @@ function output = detectEvents(cfg, data)
 % .slo_dur_min					lower duration threshold; default: 0.5
 % .slo_dur_max					upper duration threshold; default: 2.0
 % .slo_thr						the STD scaled by this factor will be the amplitude threshold; default: 1.5
+% .slo_peak2peak_min            Minimum peak 2 peak amplitude; defaukt 0.07
 % .slo_freq						frequency range in which to perform detection; default: [0.1 3.5]
 % .slo_filt_ord					filter order; default: 3
 %
@@ -102,6 +103,8 @@ function output = detectEvents(cfg, data)
 % . add from hongis code: merging of close events?
 % . add cfg option to turn on detections of each type
 % . let people choose whether to compute threshold for each or all channels
+% . input range for data mus be defined (micro or milli volts) Neuralynx
+% creates files with mV!!!
 %
 % AUTHORS:
 % Jens Klinzing, klinzing@princeton.edu
@@ -137,6 +140,9 @@ if ~isfield(cfg, 'slo_dur_max')
 end
 if ~isfield(cfg, 'slo_thr')
 	cfg.slo_thr					= 1.5; % in SD; nn: 1, 1.5, 2; hongi 1.5 (with rms)
+end
+if ~isfield(cfg, 'slo_peak2peak_min')
+    cfg.slo_peak2peak_min       = 0.07; %in same scaling as recoprding!
 end
 if ~isfield(cfg, 'slo_freq')
 	cfg.slo_freq				= [0.1 3.5]; % in Hz
@@ -555,6 +561,7 @@ end
 % Check for further characteristics based on zero crossings
 ZeroCrossings = cell(numel(chans),1);
 for iCh = 1:numel(chans)
+    SOEpisodes{iCh,1} = round(SOEpisodes{iCh,1});%compensate if Fs is not integer
 	ZeroCrossings{iCh,1} = zeros(3,size(SOEpisodes{iCh,1},2));
 	for iEvent = 1:size(SOEpisodes{iCh,1},2)
 		X = 0;  % marker for left zero crossing found
@@ -605,8 +612,8 @@ for iCh = 1:numel(chans)
 		PosPeakValue = max(slo_raw(iCh, ZeroCrossings{iCh,1}(2,iEvent):ZeroCrossings{iCh,1}(3,iEvent)),[],2);
 		Peak2PeakAmp{iCh,1}(iEvent,1) = abs(NegPeakValue)+PosPeakValue;
 	end
-	ZeroCrossings{iCh,1}(:,Peak2PeakAmp{iCh,1}<0.07) = [];
-	Peak2PeakAmp{iCh,1}(Peak2PeakAmp{iCh,1}<0.07,:) = [];
+	ZeroCrossings{iCh,1}(:,Peak2PeakAmp{iCh,1}<cfg.slo_peak2peak_min) = [];
+	Peak2PeakAmp{iCh,1}(Peak2PeakAmp{iCh,1}<cfg.slo_peak2peak_min,:) = [];
 	
 	% Find negative peaks
 	NegativePeaks{iCh,1} = zeros(size(ZeroCrossings{iCh,1},2),1);
