@@ -252,7 +252,7 @@ output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts
 % NREM
 NREMBegEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[0 1]); % where does scoring flip to S2
 NREMEndEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[1 0]); % where does scoring flip from S2 to something else?
-%NREMBegEpisode = NREMBegEpisode+1; % because it always finds the epoch before
+NREMBegEpisode = NREMBegEpisode+1; % because it always finds the epoch before
 if any(cfg.scoring(1,1)==cfg.code_NREM,2)
 	NREMBegEpisode = [1 NREMBegEpisode];
 end
