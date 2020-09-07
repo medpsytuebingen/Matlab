@@ -43,7 +43,7 @@ function output = detectEvents(cfg, data)
 % .slo_dur_min					lower duration threshold; default: 0.5
 % .slo_dur_max					upper duration threshold; default: 2.0
 % .slo_thr						the STD scaled by this factor will be the amplitude threshold; default: 1.5
-% .slo_peak2peak_min            Minimum peak 2 peak amplitude; defaukt 0.07
+% .slo_peak2peak_min            Minimum peak 2 peak amplitude; default: 0.07
 % .slo_freq						frequency range in which to perform detection; default: [0.1 3.5]
 % .slo_filt_ord					filter order; default: 3
 %
@@ -103,7 +103,7 @@ function output = detectEvents(cfg, data)
 % . add from hongis code: merging of close events?
 % . add cfg option to turn on detections of each type
 % . let people choose whether to compute threshold for each or all channels
-% . input range for data mus be defined (micro or milli volts) Neuralynx
+% . input range for data must be defined (micro or milli volts) Neuralynx
 % creates files with mV!!!
 %
 % AUTHORS:
