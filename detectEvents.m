@@ -630,12 +630,12 @@ for iCh = 1:numel(chans)
 		% ...also creates SO waveforms
 		twindow						= 2.5; % data will be +/- twindow
 		SloSpiAmpCoupling{iCh,1}	= [];
-		SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),(twindow*2*Fs + 1));
+		SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),round(twindow*2*Fs + 1));
 		SOPhase						= [];
 		for iSO = 1:size(NegativePeaks{iCh,1},1)
-			SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+(twindow*Fs));
+			SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
 			SOPhase					= rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:))));
-			[~, SpiAmpIndex]		= max(spi_amp(iCh, NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+(twindow*Fs))); % spindle maximum amp in samples from SO window start
+			[~, SpiAmpIndex]		= max(spi_amp(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs))); % spindle maximum amp in samples from SO window start
 			SloSpiAmpCoupling{iCh,1}(iSO,1) = SOPhase(SpiAmpIndex);
 		end
 		
@@ -647,7 +647,7 @@ for iCh = 1:numel(chans)
 			spi_cur = [];
 			% If there is a spindle fully inside SO plus minus time
 			% window
-			spi_ind = find(output.spi.events{iCh}(1,:) > NegativePeaks{iCh,1}(iSO,1)-twindow*Fs & output.spi.events{iCh}(2,:) < NegativePeaks{iCh,1}(iSO,1)+twindow*Fs);
+			spi_ind = find(output.spi.events{iCh}(1,:) > NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs) & output.spi.events{iCh}(2,:) < NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
 			if size(spi_ind,2) > 0 % if at least one spindle was found
 				spi_cur = output.spi.events{iCh}(:,spi_ind);
 			end
@@ -655,8 +655,8 @@ for iCh = 1:numel(chans)
 				SOPhase = rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:)))); % SO phase along entire window
 				[~, SpiAmpIndex] = max(spi_amp(iCh, spi_cur(1,iSpi):spi_cur(2,iSpi))); % find spindle maximum amp (samples from spindle start)
 				tmp = spi_cur(1,iSpi) + SpiAmpIndex - 1; % spindle maximum amp in global samples
-				tmp = tmp - (NegativePeaks{iCh,1}(iSO,1)-(twindow*Fs)); % spindle maximum amp in samples from SO window start
-				SloSpiDetCoupling{iCh,1}(cnt,1) = SOPhase(tmp); % note down phase there
+				tmp = tmp - (NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs)); % spindle maximum amp in samples from SO window start
+				SloSpiDetCoupling{iCh,1}(cnt,1) = SOPhase(round(tmp)); % note down phase there
 				cnt = cnt + 1;
 			end
 		end
