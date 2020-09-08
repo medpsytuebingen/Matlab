@@ -674,7 +674,111 @@ output.SloSpiDetCoupling		= SloSpiDetCoupling; % similar to above but only if a 
 
 % clear data_slo SOEpisodes NegativePeaks SOGA slo_raw slo_std slo_mean
 %% Ripple detection
+cfg.rip_freq = [150 250];
+cfg.rip_filt_ord = 3;
+cfg.rip_thr    = [2; 5];
+cfg.rip_dur_min = 0.03 * Fs;
+cfg.rip_dur_max = 0.3 * Fs;
 
+cfg_pp				= [];
+cfg_pp.bpfilter		= 'yes';
+if cfg.rip_indiv
+	cfg_pp.bpfreq	= rip_freq_indiv;
+	output.rip.freq = rip_freq_indiv;
+else
+	cfg_pp.bpfreq	= cfg.rip_freq;
+	output.rip.freq = cfg.rip_freq;
+end
+cfg_pp.bpfiltord	= cfg.rip_filt_ord;
+data_rip			= ft_preprocessing(cfg_pp, data);
+
+rip_amp				= abs(hilbert(data_rip.trial{1}'))'; % needs to be transposed for hilbert, then transposed back...
+rip_amp_mean		= mean(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
+rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
+
+rip = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected ripples
+for iEpoch = 1:size(NREMEpisodes,2)
+    rip_amp_tmp = rip_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+    for iCh = 1:numel(chans)
+        % First threshold criterion for min duration
+        % Where does the smoothed envelope cross the threshold?
+        RipAmplitudeTmp = smooth(rip_amp_tmp(iCh, :),0.04 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
+        above_threshold = RipAmplitudeTmp > cfg.rip_thr(1,1)*rip_amp_std(iCh); % long column showing threshold crossings
+        isLongEnough = bwareafilt(above_threshold, [cfg.rip_dur_min(1)*Fs, cfg.rip_dur_max(1)*Fs]); % find ripple within duration range
+        isLongEnough = [0; isLongEnough]; %compensate that ripple might start in the beginning
+        ripBeginning =  strfind(isLongEnough',[0 1]); %find ripple Beginning line before compensates that it find last 0
+        ripEnd = strfind(isLongEnough',[1 0])-1; %find ripple Ending subtract 1 because of added 0 in the beginning
+        
+        % Some plots for debugging
+        if cfg.debugging
+            win = 1:5000;
+            rip_raw = data_rip.trial{1}(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+            plot(win/Fs, rip_raw(1,win)), hold on			% raw signal
+            plot(win/Fs, rip_amp_tmp(iCh,win), 'r')			% envelope
+            plot(win/Fs, RipAmplitudeTmp(win), 'r')		% smoothed envelope
+            line([win(1)/Fs win(end)/Fs],[cfg.rip_thr(1,1)*rip_amp_std(iCh) cfg.rip_thr(1,1)*rip_amp_std(iCh)]) % threshold
+            plot(win/Fs, above_threshold(win))				% threshold crossed
+            plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
+        end
+        % Delete ripple if it is cut by beginning / end of epoch      
+        if ~isempty(ripBeginning) || ~isempty(ripEnd)
+            if length(ripEnd)<length(ripBeginning)
+                ripBeginning(:,end)=[];
+            end
+            if ~isempty(ripBeginning) || ~isempty(ripEnd) && ripBeginning(1,1)==1
+                ripBeginning(:,1) = [];
+                ripEnd(:,1) = [];
+            end
+            ripples = [ripBeginning;ripEnd];
+            rip{iEpoch,iCh} = ripples+(NREMEpisodes(1,iEpoch)*Fs);%include beginning of NREMEpoch
+        else
+            rip{iEpoch,iCh} = [];
+        end
+        
+        CurrentRipples = rip{iEpoch,iCh};
+        TempIdx = [];
+        for irip = 1: size (CurrentRipples,2)
+            window_size = 0.5 * Fs; % in sec
+            DataTmprip = data_rip.trial{1}(iCh, CurrentRipples(1,irip)-window_size : CurrentRipples(2,irip)+window_size); %get filteres ripple signal for eachripple + - 5sec
+            RipAmplitudeTmp = smooth(abs(hilbert(DataTmprip)),40);%get smoothed instantaneous amplitude
+            
+            % Second Peak threshold criterion
+            above_Max = RipAmplitudeTmp(window_size:end-window_size) > cfg.rip_thr(2,1)*rip_amp_std(iCh);
+            MaxIsThere = bwareafilt(above_Max, [1, cfg.rip_dur_max(1)*Fs]); %find ripple within duration range
+            [pks,locs] = findpeaks(DataTmprip(1, window_size:end-window_size),'MinPeakProminence', cfg.rip_thr(1,1)*rip_amp_std(iCh));
+            if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough ripple is present and check that no peak to peak distance is more than 125ms
+                % do nothing
+            else %if criteria not fullfilled store index of ripples and kill it later
+                TempIdx = [TempIdx irip];
+            end
+        end
+        rip{iEpoch,iCh}(:,TempIdx)=[];%if not criteriy fullfilled delete detected ripple
+    end
+end
+
+% Calculate ripple density
+output.rip.density = zeros(numel(chans),1);
+for iCh = 1:numel(chans)
+    TotalNumberOfRip = 0;
+    EpisodeDurations = 0;
+    for iEpoch = 1:size(rip,1)
+        CurrentRipples = rip{iEpoch,iCh};
+        TotalNumberOfRip = TotalNumberOfRip +size(CurrentRipples,2);
+        EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEpoch)-NREMEpisodes(1,iEpoch);
+    end
+    output.rip.density(iCh) = TotalNumberOfRip/(EpisodeDurations/60); %ripple density in ripples per minute
+end
+
+% Fill the output
+output.rip.events			= cell(numel(chans), 1);
+for iCh = 1:size(rip, 2)
+    output.rip.events{iCh} = [rip{:,iCh}];
+end
+output.rip.events_perNREMep	= rip';
+output.rip.amp_std			= rip_amp_std;
+output.rip.amp_mean			= rip_amp_mean;
+
+clear rip_amp_tmp TotalNumberOfrip EpisodeDurations rip data_rip
 %% Theta
 % Calculates theta amplitude during REM
 cfg_pp				= [];
