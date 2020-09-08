@@ -63,7 +63,7 @@ function output = detectEvents(cfg, data)
 %
 % Parameters theta amplitude:
 % .the_freq						frequency range in which to perform detection; default: [4 8]
-% .the_filt_ord					filter order; default: 6
+% .the_filt_ord					filter order; default: 3
 %
 % Parameters generic event detection:
 % .gen.***						*** = name of another event type (your choice)
@@ -185,7 +185,7 @@ if ~isfield(cfg, 'the_freq')
 	cfg.the_freq				= [4 8];
 end
 if ~isfield(cfg, 'the_filt_ord')
-	cfg.the_filt_ord			= 6;
+	cfg.the_filt_ord			= 3;
 end
 
 % Start filling the output
