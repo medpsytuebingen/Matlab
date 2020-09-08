@@ -38,6 +38,9 @@ function output = detectEvents(cfg, data)
 %								cfg.artfctdef.zvalue.artifact =	[111 222]; ...and so on.
 %								Data in these artifactual time windows will not be used. Artifacts may be overlapping.
 % .artfctpad					int; padding (in sec) of segments to discard before and after to discard (default: 0.5)
+% .spectrum						logical; turns estimation of power spectrum on (1) or off (0); default: 0
+%								This returns, separately for artifact-free NREM and REM stages, the commonly used raw spectrum (or 'mixed spectrum', mix), as well as the IRASA-computed fractal component (fra), oscillatory component (osc), and their ratio (rel = osc/fra).
+%								Note that if spi_indiv = 1, the spectrum is always returned since it has to be calculated for peak detection anyways
 %
 % Parameters SO/slow wave detection:
 % .slo							logical; turns slow oscillation/slow wave detection on (1) or off (0); default: 0
@@ -112,6 +115,8 @@ function output = detectEvents(cfg, data)
 % . input range for data must be defined (micro or milli volts) Neuralynx
 % creates files with mV!!!
 % . SO-check should delete SOs completely (see todo comment)
+% . artifact handling! currently, events are detected based on NREM episodes, which are unaffected by artifacts. only std/amp calculations exclude artifact since they are based on scoring_fine, in which artifacts are marked (99).
+%   one solution possible: add after each event detection another check for any overlaps with artifacts
 %
 % AUTHORS:
 % Jens Klinzing, klinzing@princeton.edu
@@ -141,6 +146,15 @@ if ~isfield(cfg, 'debugging') % undocumented debugging option
 end
 if isfield(cfg, 'artfctdef') && ~isfield(cfg, 'artfctpad')
 	cfg.artfctpad = 0.5;
+end
+
+% Set default values - spectrum % TODO: Add to documentation
+if ~isfield(cfg, 'spectrum') % 
+	cfg.spectrum				= 0; 
+end
+if isfield(cfg, 'spi_indiv') && cfg.spi_indiv
+	disp('If individual spindle peaks are requested, the spectrum is always calculated.')
+	cfg.spectrum				= 1; 
 end
 
 % Set default values - slow oscillations/slow waves
@@ -299,8 +313,8 @@ output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts
 
 % Extract episodes (save in seconds)
 % NREM
-NREMBegEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[0 1]); % where does scoring flip to S2
-NREMEndEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[1 0]); % where does scoring flip from S2 to something else?
+NREMBegEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[0 1]); % where does scoring flip to NREM
+NREMEndEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[1 0]); % where does scoring flip from NREM to something else
 NREMBegEpisode = NREMBegEpisode+1; % because it always finds the epoch before
 if any(cfg.scoring(1,1)==cfg.code_NREM,2)
 	NREMBegEpisode = [1 NREMBegEpisode];
@@ -340,12 +354,124 @@ output.NREMepisode			= NREMEpisodes;
 output.REMepisode			= REMEpisodes;
 output.WAKEpisodes			= WAKEpisodes;
 
+%% Spectrum
+% Will be computed on artifact-free data, and separately for NREM and REM
+if cfg.spectrum
+	disp('Calculating spectrum...')
+	spec_freq = [1 45]; % let's not ask the user (to make sure the spindle range is included in this range)
+	
+	% NREM episodes in sample resolution
+	nrem_begs = strfind(any(scoring_fine==cfg.code_NREM,2)',[0 1]); % where does scoring flip to NREM
+	nrem_ends = strfind(any(scoring_fine==cfg.code_NREM,2)',[1 0]); % where does scoring flip from NREM to something else
+	nrem_begs = nrem_begs+1; % because it always finds the sample before
+	if any(scoring_fine(1,1)==cfg.code_NREM,2) % in case recording starts with this stage
+		nrem_begs = [1 nrem_begs];
+	end
+	if any(scoring_fine(end,1)==cfg.code_NREM,2) % in case recording starts with this stage
+		nrem_ends = [nrem_ends length(scoring_fine)];
+	end
+	
+	% REM episodes in sample resolution
+	rem_begs = strfind(any(scoring_fine==cfg.code_REM,2)',[0 1]); % where does scoring flip to NREM
+	rem_ends = strfind(any(scoring_fine==cfg.code_REM,2)',[1 0]); % where does scoring flip from NREM to something else
+	rem_begs = rem_begs+1; % because it always finds the sample before
+	if any(scoring_fine(1,1)==cfg.code_REM,2) % in case recording starts with this stage
+		rem_begs = [1 rem_begs];
+	end
+	if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording starts with this stage
+		rem_ends = [rem_ends length(scoring_fine)];
+	end
+	
+	% Cut out NREM and REM segemnts
+	cfg_tmp						= [];
+	cfg_tmp.trl					= [nrem_begs' nrem_ends' zeros(length(nrem_ends'),1)];
+	tmp_nrem					= ft_redefinetrial(cfg_tmp, data);
+	cfg_tmp.trl					= [rem_begs' rem_ends' zeros(length(rem_ends'),1)];
+	tmp_rem						= ft_redefinetrial(cfg_tmp, data);
+	
+	% Downsample data to speed up spectral estimates (done before cutting
+	% in smaller segments is orders of magnitudes faster)
+	if Fs > 128
+		if mod(Fs, 100) == 0
+			res_freq = 100;
+		elseif mod(Fs, 125) == 0
+			res_freq = 125;
+		elseif mod(Fs, 128) == 0
+			res_freq = 128;
+		else
+			error('You got some weird sampling frequency, check out this part of the code and make your own decisions.')
+		end
+		
+		% Resample data (improves performance)
+		cfg_tmp				= [];
+		cfg_tmp.resamplefs  = res_freq;
+		tmp_nrem			= ft_resampledata(cfg_tmp, tmp_nrem);
+		tmp_rem				= ft_resampledata(cfg_tmp, tmp_rem);
+	end
+	
+	% Cut into small segments (improves and smoothens spectral estimates)
+	cfg_tmp						= [];
+	cfg_tmp.length				= 4;  % cut data into segments of this length (in sec)
+	cfg_tmp.overlap				= 0;  % with this overlap
+	tmp_nrem					= ft_redefinetrial(cfg_tmp, tmp_nrem);
+	tmp_rem						= ft_redefinetrial(cfg_tmp, tmp_rem);
+	
+	% Calculate spectra
+	cfg_tmp						= [];
+	cfg_tmp.foi					= spec_freq(1):0.05:spec_freq(2);
+	cfg_tmp.method				= 'irasa';
+	cfg_tmp.pad					= 'nextpow2';
+	fra_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
+	fra_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	
+	cfg_tmp.method 				= 'mtmfft';
+	cfg_tmp.taper 				= 'hanning';
+	mix_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
+	mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	
+	% Calculate the oscillatory component by subtracting the fractal from the
+	% mixed component
+	cfg_tmp						= [];
+	cfg_tmp.parameter			= 'powspctrm';
+	cfg_tmp.operation			= 'subtract';
+	osc_nrem					= ft_math(cfg_tmp, mix_nrem, fra_nrem);
+	osc_rem						= ft_math(cfg_tmp, mix_rem, fra_rem);
+	
+	% Use percent change for even more obvious peaks
+	cfg_tmp.operation			= 'divide';
+	rel_nrem					= ft_math(cfg_tmp, osc_nrem, fra_nrem);
+	rel_rem						= ft_math(cfg_tmp, osc_rem, fra_rem);
+	
+	output.spectrum.fra_nrem	= fra_nrem.powspctrm;
+	output.spectrum.fra_rem		= fra_rem.powspctrm;
+	output.spectrum.mix_nrem	= mix_nrem.powspctrm;
+	output.spectrum.mix_rem		= mix_rem.powspctrm;
+	output.spectrum.osc_nrem	= osc_nrem.powspctrm;
+	output.spectrum.osc_rem		= osc_rem.powspctrm;
+	output.spectrum.rel_nrem	= rel_nrem.powspctrm;
+	output.spectrum.rel_rem		= rel_rem.powspctrm;
+	output.spectrum.freq		= fra_nrem.freq; % add frequency vector
+	
+	if cfg.debugging
+		figure
+		subplot(3,1,1)
+		plot(output.spectrum.freq, output.spectrum.fra_nrem(1,:)), hold on
+		plot(output.spectrum.freq, output.spectrum.mix_nrem(1,:))
+		subplot(3,1,2)
+		plot(output.spectrum.freq, output.spectrum.osc_nrem(1,:))
+		subplot(3,1,3)
+		plot(output.spectrum.freq, output.spectrum.rel_nrem(1,:))
+	end
+end
+
+
 %% Spindles
 if cfg.spi
 	disp('Starting spindle detection...')
 	
 	% Find individual spindle peaks
 	if cfg.spi_indiv
+		% TODO: If spectrum was calculated above, use that data; maybe force spectrum if spi_indiv
 		% Cut out NREM episodes
 		cfg_tmp				= [];
 		cfg_tmp.trl			= [NREMEpisodes'*Fs zeros(size(NREMEpisodes,2),1)];
@@ -358,13 +484,13 @@ if cfg.spi
 		data_nrem			= ft_redefinetrial(cfg_tmp, data);
 		
 		% Determine resampling frequency	TODO: Test this
-		if Fs > 250
-			if mod(Fs, 200) == 0
-				res_freq = 200;
-			elseif mod(Fs, 250) == 0
-				res_freq = 250;
-			elseif mod(Fs, 256) == 0
-				res_freq = 256;
+		if Fs > 128
+			if mod(Fs, 100) == 0
+				res_freq = 100;
+			elseif mod(Fs, 125) == 0
+				res_freq = 125;
+			elseif mod(Fs, 128) == 0
+				res_freq = 128;
 			else
 				error('You got some weird sampling frequency, check out this part of the code and make your own decisions.')
 			end
