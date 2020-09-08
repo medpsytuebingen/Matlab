@@ -633,10 +633,12 @@ for iCh = 1:numel(chans)
 		SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),round(twindow*2*Fs + 1));
 		SOPhase						= [];
 		for iSO = 1:size(NegativePeaks{iCh,1},1)
-			SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
-			SOPhase					= rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:))));
-			[~, SpiAmpIndex]		= max(spi_amp(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs))); % spindle maximum amp in samples from SO window start
-			SloSpiAmpCoupling{iCh,1}(iSO,1) = SOPhase(SpiAmpIndex);
+            if NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs) < length(slo_raw) %only consider SOs far enough from recording end
+                SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
+                SOPhase					= rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:))));
+                [~, SpiAmpIndex]		= max(spi_amp(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs))); % spindle maximum amp in samples from SO window start
+                SloSpiAmpCoupling{iCh,1}(iSO,1) = SOPhase(SpiAmpIndex);
+            end
 		end
 		
 		% Method 2: Extract SO phase based on spindle detection
@@ -671,6 +673,7 @@ output.SloSpiAmpCoupling		= SloSpiAmpCoupling; % based on spindle amplitude maxi
 output.SloSpiDetCoupling		= SloSpiDetCoupling; % similar to above but only if a spindle event was detected
 
 % clear data_slo SOEpisodes NegativePeaks SOGA slo_raw slo_std slo_mean
+%% Ripple detection
 
 %% Theta
 % Calculates theta amplitude during REM
