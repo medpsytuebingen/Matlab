@@ -61,6 +61,12 @@ function output = detectEvents(cfg, data)
 % .spi_indiv_win				int (in Hz); width of frequency window over which to perform spindle detection (individual spindle peak frequency +/- spi_indiv_win); default: 2
 % .spi_indiv_chan				cell array with string; channels for estimating spindle peak frequency; you probably dont want to mix far away channels here
 %
+% Parameters ripple detection:
+% .rip_control_Chan             Data of the Channel used as control for ripple detection. Typically EEG or EMG electrode to detect commom noise.
+%                               Fieldtrip raw data structure, should contain a single trial      
+% 
+% 
+% 
 % Parameters theta amplitude:
 % .the_freq						frequency range in which to perform detection; default: [4 8]
 % .the_filt_ord					filter order; default: 3
@@ -186,6 +192,9 @@ if ~isfield(cfg, 'the_freq')
 end
 if ~isfield(cfg, 'the_filt_ord')
 	cfg.the_filt_ord			= 3;
+end
+if ~isfield(cfg,'cfg.rip_indiv')
+    cfg.rip_indiv               = 0;
 end
 
 % Start filling the output
@@ -448,7 +457,7 @@ for iEpoch = 1:size(NREMEpisodes,2)
 		
 		% Some plots for debugging
 		if cfg.debugging
-			win = 1:5000;
+			win = 1:50000;
 			spi_raw = data_spi.trial{1}(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
 			plot(win/Fs, spi_raw(1,win)), hold on			% raw signal
 			plot(win/Fs, spi_amp_tmp(iCh,win), 'r')			% envelope
@@ -474,30 +483,34 @@ for iEpoch = 1:size(NREMEpisodes,2)
 		
 		CurrentSpindles = spi{iEpoch,iCh};
 		TempIdx = [];
-		for iSpi = 1: size (CurrentSpindles,2)
-			window_size = 5 * Fs; % in sec
-			DataTmpSpi = data_spi.trial{1}(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filteres spindle signal for eachspindle + - 5sec
-			FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
-			
-			% Second threshold criterion
-			above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(2,1)*spi_amp_std(iCh);
-			isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(2)*Fs, cfg.spi_dur_max(2)*Fs]); %find spindle within duration range
-			
-			% Third threshold criterion
-			above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(3,1)*spi_amp_std(iCh);
-			MaxIsThere = bwareafilt(above_Max, [1, cfg.spi_dur_max(1)*Fs]); %find spindle within duration range
-			[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', cfg.spi_thr(1,1)*spi_amp_std(iCh));
-			if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
-				% do nothing
-			else %if criteria not fullfilled store index of Spindles and kill it later
-				TempIdx = [TempIdx iSpi];
-			end
-		end
+        for iSpi = 1: size (CurrentSpindles,2)
+            window_size = 5 * Fs; % in sec
+            if CurrentSpindles(2,iSpi)+window_size < length(data_spi.trial{1}(iCh,:)) %delete Spi to close to recording end
+                DataTmpSpi = data_spi.trial{1}(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filteres spindle signal for eachspindle + - 5sec
+                FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
+                
+                % Second threshold criterion
+                above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(2,1)*spi_amp_std(iCh);
+                isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(2)*Fs, cfg.spi_dur_max(2)*Fs]); %find spindle within duration range
+                
+                % Third threshold criterion
+                above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(3,1)*spi_amp_std(iCh);
+                MaxIsThere = bwareafilt(above_Max, [1, cfg.spi_dur_max(1)*Fs]); %find spindle within duration range
+                [pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', cfg.spi_thr(1,1)*spi_amp_std(iCh));
+                if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
+                    % do nothing
+                else %if criteria not fullfilled store index of Spindles and kill it later
+                    TempIdx = [TempIdx iSpi];
+                end
+            else
+                TempIdx = [TempIdx iSpi];
+            end
+        end
 		spi{iEpoch,iCh}(:,TempIdx)=[];%if not criteriy fullfilled delete detected spindle
 	end
 end
 
-% Calculate spindel density
+% Calculate spindle density
 output.spi.density = zeros(numel(chans),1);
 for iCh = 1:numel(chans)
 	TotalNumberOfSpi = 0;
@@ -665,7 +678,7 @@ for iCh = 1:numel(chans)
 	end
 end
 
-% add to putput
+% add to output
 output.slo.events				= ZeroCrossings; % up-down, down-up, up-down crossings
 output.slo.neg_peaks			= NegativePeaks;
 output.slo.waveform				= SOGA;
@@ -677,12 +690,12 @@ output.SloSpiDetCoupling		= SloSpiDetCoupling; % similar to above but only if a 
 cfg.rip_freq = [150 250];
 cfg.rip_filt_ord = 3;
 cfg.rip_thr    = [2; 5];
-cfg.rip_dur_min = 0.03 * Fs;
-cfg.rip_dur_max = 0.3 * Fs;
+cfg.rip_dur_min = 0.03 ;
+cfg.rip_dur_max = 0.3 ;
 
 cfg_pp				= [];
 cfg_pp.bpfilter		= 'yes';
-if cfg.rip_indiv
+if cfg.rip_indiv ==1
 	cfg_pp.bpfreq	= rip_freq_indiv;
 	output.rip.freq = rip_freq_indiv;
 else
@@ -695,14 +708,21 @@ data_rip			= ft_preprocessing(cfg_pp, data);
 rip_amp				= abs(hilbert(data_rip.trial{1}'))'; % needs to be transposed for hilbert, then transposed back...
 rip_amp_mean		= mean(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
-
+if isfield(cfg,'rip_control_Chan')
+    data_rip_control			= ft_preprocessing(cfg_pp, cfg.rip_control_Chan); %filter Control channel
+    rip_amp				= abs(hilbert(data_rip_control.trial{1}'))'; % needs to be transposed for hilbert, then transposed back...
+    rip_amp_mean		= mean(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
+    rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
+else
+    
+end
 rip = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected ripples
 for iEpoch = 1:size(NREMEpisodes,2)
     rip_amp_tmp = rip_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
     for iCh = 1:numel(chans)
         % First threshold criterion for min duration
         % Where does the smoothed envelope cross the threshold?
-        RipAmplitudeTmp = smooth(rip_amp_tmp(iCh, :),0.04 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
+        RipAmplitudeTmp = smooth(rip_amp_tmp(iCh, :),0.004 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
         above_threshold = RipAmplitudeTmp > cfg.rip_thr(1,1)*rip_amp_std(iCh); % long column showing threshold crossings
         isLongEnough = bwareafilt(above_threshold, [cfg.rip_dur_min(1)*Fs, cfg.rip_dur_max(1)*Fs]); % find ripple within duration range
         isLongEnough = [0; isLongEnough]; %compensate that ripple might start in the beginning
@@ -711,7 +731,7 @@ for iEpoch = 1:size(NREMEpisodes,2)
         
         % Some plots for debugging
         if cfg.debugging
-            win = 1:5000;
+            win = 1:50000;
             rip_raw = data_rip.trial{1}(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
             plot(win/Fs, rip_raw(1,win)), hold on			% raw signal
             plot(win/Fs, rip_amp_tmp(iCh,win), 'r')			% envelope
@@ -739,16 +759,20 @@ for iEpoch = 1:size(NREMEpisodes,2)
         TempIdx = [];
         for irip = 1: size (CurrentRipples,2)
             window_size = 0.5 * Fs; % in sec
-            DataTmprip = data_rip.trial{1}(iCh, CurrentRipples(1,irip)-window_size : CurrentRipples(2,irip)+window_size); %get filteres ripple signal for eachripple + - 5sec
-            RipAmplitudeTmp = smooth(abs(hilbert(DataTmprip)),40);%get smoothed instantaneous amplitude
-            
-            % Second Peak threshold criterion
-            above_Max = RipAmplitudeTmp(window_size:end-window_size) > cfg.rip_thr(2,1)*rip_amp_std(iCh);
-            MaxIsThere = bwareafilt(above_Max, [1, cfg.rip_dur_max(1)*Fs]); %find ripple within duration range
-            [pks,locs] = findpeaks(DataTmprip(1, window_size:end-window_size),'MinPeakProminence', cfg.rip_thr(1,1)*rip_amp_std(iCh));
-            if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough ripple is present and check that no peak to peak distance is more than 125ms
-                % do nothing
-            else %if criteria not fullfilled store index of ripples and kill it later
+            if  CurrentRipples(2,irip)+window_size < length(data_rip.trial{1}(iCh,:)) %check for distance to recording end
+                DataTmprip = data_rip.trial{1}(iCh, CurrentRipples(1,irip)-window_size : CurrentRipples(2,irip)+window_size); %get filteres ripple signal for eachripple + - 5sec
+                RipAmplitudeTmp = smooth(abs(hilbert(DataTmprip)),40);%get smoothed instantaneous amplitude
+                
+                % Second Peak threshold criterion
+                above_Max = RipAmplitudeTmp(window_size:end-window_size) > cfg.rip_thr(2,1)*rip_amp_std(iCh);
+                MaxIsThere = bwareafilt(above_Max, [1, cfg.rip_dur_max(1)*Fs]); %find ripple within duration range
+                [pks,locs] = findpeaks(DataTmprip(1, window_size:end-window_size),'MinPeakProminence', cfg.rip_thr(1,1)*rip_amp_std(iCh));
+                if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough ripple is present and check that no peak to peak distance is more than 125ms
+                    % do nothing
+                else %if criteria not fullfilled store index of ripples and kill it later
+                    TempIdx = [TempIdx irip];
+                end
+            else %if ripple to close to recording end
                 TempIdx = [TempIdx irip];
             end
         end
