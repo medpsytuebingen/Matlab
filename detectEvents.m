@@ -62,11 +62,8 @@ function output = detectEvents(cfg, data)
 % .spi_indiv_chan				cell array with string; channels for estimating spindle peak frequency; you probably dont want to mix far away channels here
 %
 % Parameters ripple detection:
-% .rip_control_Chan             Data of the Channel used as control for ripple detection. Typically EEG or EMG electrode to detect commom noise.
-%                               Fieldtrip raw data structure, should contain a single trial      
-% 
-% 
-% 
+% .rip_control_Chan             Channel name of the channel used as control for ripple detection.       
+%  
 % Parameters theta amplitude:
 % .the_freq						frequency range in which to perform detection; default: [4 8]
 % .the_filt_ord					filter order; default: 3
@@ -695,13 +692,10 @@ cfg.rip_dur_max = 0.3 ;
 
 cfg_pp				= [];
 cfg_pp.bpfilter		= 'yes';
-if cfg.rip_indiv ==1
-	cfg_pp.bpfreq	= rip_freq_indiv;
-	output.rip.freq = rip_freq_indiv;
-else
-	cfg_pp.bpfreq	= cfg.rip_freq;
-	output.rip.freq = cfg.rip_freq;
-end
+
+cfg_pp.bpfreq	= cfg.rip_freq;
+output.rip.freq = cfg.rip_freq;
+
 cfg_pp.bpfiltord	= cfg.rip_filt_ord;
 data_rip			= ft_preprocessing(cfg_pp, data);
 
@@ -709,10 +703,7 @@ rip_amp				= abs(hilbert(data_rip.trial{1}'))'; % needs to be transposed for hil
 rip_amp_mean		= mean(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 if isfield(cfg,'rip_control_Chan')
-    data_rip_control			= ft_preprocessing(cfg_pp, cfg.rip_control_Chan); %filter Control channel
-    rip_amp				= abs(hilbert(data_rip_control.trial{1}'))'; % needs to be transposed for hilbert, then transposed back...
-    rip_amp_mean		= mean(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
-    rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
+    
 else
     
 end
@@ -772,10 +763,18 @@ for iEpoch = 1:size(NREMEpisodes,2)
                 else %if criteria not fullfilled store index of ripples and kill it later
                     TempIdx = [TempIdx irip];
                 end
+                if isfield(cfg,'rip_control_Chan') && strcmp(data_rip.label{iCh},cfg.rip_control_Chan)%check for detected common noise in control channel
+                    CurrentControlRipples = rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan)};
+                    if any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
+                            any(ismember(CurrentControlRipples(2,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))  %check if control ripple Ending is inside detected ripple
+                        TempIdx = [TempIdx irip];
+                    end
+                end
             else %if ripple to close to recording end
                 TempIdx = [TempIdx irip];
             end
         end
+        
         rip{iEpoch,iCh}(:,TempIdx)=[];%if not criteriy fullfilled delete detected ripple
     end
 end
