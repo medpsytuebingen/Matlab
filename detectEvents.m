@@ -153,6 +153,7 @@ end
 if ~isfield(cfg, 'slo_filt_ord')
 	cfg.slo_filt_ord			= 3;
 end
+%default values for spindle detection
 if ~isfield(cfg, 'spi_dur_min')
 	cfg.spi_dur_min				= [0.5 0.25]; % in s
 end
@@ -184,15 +185,33 @@ end
 if cfg.spi_indiv == 1 && ~isfield(cfg, 'spi_indiv_win')
 	cfg.spi_indiv_win = 2; % signal will be filtered +/- spi_indiv_win around individual spindle peak frequency
 end
+% default values for ripple detection
+if ~isfield(cfg,'cfg.rip_indiv')
+    cfg.rip_indiv               = 0;
+end
+if ~isfield(cfg,'rip_freq')
+    cfg.rip_freq = [150 250];
+end
+if ~isfield(cfg,'rip_filt_ord')
+    cfg.rip_filt_ord = 3;
+end
+if ~isfield(cfg,'rip_thr')
+    cfg.rip_thr    = [2; 5];
+end
+if ~isfield(cfg,'rip_dur_min')
+    cfg.rip_dur_min = 0.03 ;
+end
+if ~isfield(cfg,'rip_dur_max')
+    cfg.rip_dur_max = 0.3 ;
+end
+%defaukt values for theta band analysis
 if ~isfield(cfg, 'the_freq')
 	cfg.the_freq				= [4 8];
 end
 if ~isfield(cfg, 'the_filt_ord')
 	cfg.the_filt_ord			= 3;
 end
-if ~isfield(cfg,'cfg.rip_indiv')
-    cfg.rip_indiv               = 0;
-end
+
 
 % Start filling the output
 output						= [];
@@ -684,12 +703,6 @@ output.SloSpiDetCoupling		= SloSpiDetCoupling; % similar to above but only if a 
 
 % clear data_slo SOEpisodes NegativePeaks SOGA slo_raw slo_std slo_mean
 %% Ripple detection
-cfg.rip_freq = [150 250];
-cfg.rip_filt_ord = 3;
-cfg.rip_thr    = [2; 5];
-cfg.rip_dur_min = 0.03 ;
-cfg.rip_dur_max = 0.3 ;
-
 cfg_pp				= [];
 cfg_pp.bpfilter		= 'yes';
 
@@ -702,11 +715,7 @@ data_rip			= ft_preprocessing(cfg_pp, data);
 rip_amp				= abs(hilbert(data_rip.trial{1}'))'; % needs to be transposed for hilbert, then transposed back...
 rip_amp_mean		= mean(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
-if isfield(cfg,'rip_control_Chan')
-    
-else
-    
-end
+
 rip = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected ripples
 for iEpoch = 1:size(NREMEpisodes,2)
     rip_amp_tmp = rip_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
