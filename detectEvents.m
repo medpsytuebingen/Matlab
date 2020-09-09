@@ -60,6 +60,8 @@ function output = detectEvents(cfg, data)
 % .spi_thr(1,1)					the signal amplitude STD scaled by this factor will be the *first* amplitude threshold (events must cross this threshold for at least spi_dur_min(1,1) sec); default: 1.5
 % .spi_thr(2,1)					...the *second* threshold (events must cross this threshold for at least spi_dur_min(2,1) sec); default: 2
 % .spi_thr(3,1)					...the *third* threshold (events must cross this threshold at least once); default: 2.5
+% .spi_thr_chan					cell array of strings; list of channels, the average of which will be used to determine the detection threshold; default: []
+%								if empty, the threshold will be determined separately for each channel
 % .spi_freq						int array (1 x 2); frequency range in which to perform detection, default: [12 16])
 %								Note: if cfg.spi_indiv == 1 this will be the range in which the individual spindle frequency peak is termined; filtering will then be performed at this frequency +/- cfg.spi_indiv_win
 % .spi_filt_ord					order of spindle band filter; default: 6
@@ -109,11 +111,8 @@ function output = detectEvents(cfg, data)
 % . rework variable naming inside function and output
 % . rework output: all data in one row per channel, also per ep and for
 % entire recording
-% . add from hongis code: merging of close events?
-% . let people choose whether to compute threshold for each or all channels
-% . input range for data must be defined (micro or milli volts) Neuralynx
-% creates files with mV!!!
-% . SO-check should delete SOs completely (see todo comment)
+% . merging of close events?
+% . NN: SO-check should delete SOs completely (see todo comment)
 % . artifact handling! currently, events are detected based on NREM episodes, which are unaffected by artifacts. only std/amp calculations exclude artifact since they are based on scoring_fine, in which artifacts are marked (99).
 %   one solution possible: add after each event detection another check for any overlaps with artifacts
 %
@@ -198,6 +197,9 @@ if ~isfield(cfg, 'spi_thr')
 	cfg.spi_thr(3,1)			= 2.5;
 elseif isfield(cfg, 'spi_thr') && length(cfg.spi_thr) ~= 3
 	error('Spindle thresholds not provided properly (should be 3x1 vector in cfg.spi_thr).')
+end
+if ~isfield(cfg, 'spi_thr_chan')
+	cfg.spi_thr_chan			= [];
 end
 if ~isfield(cfg, 'spi_freq')
 	cfg.spi_freq				= [12 16]; % Hz; filtering range for spindle detection
@@ -499,6 +501,22 @@ if cfg.spi
 	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
+	% Determine threshold(s)
+	thr = zeros(3,numel(chans));
+	if isempty(cfg.spi_thr_chan)
+		% Determine channel-specific thresholds
+		for iCh = 1:numel(chans)
+			thr(1, iCh) = cfg.spi_thr(1,1)*spi_amp_std(iCh);
+			thr(2, iCh) = cfg.spi_thr(2,1)*spi_amp_std(iCh);
+			thr(3, iCh) = cfg.spi_thr(3,1)*spi_amp_std(iCh);
+		end
+	else
+		% One threshold for all channels, determined based on mean of provided channels
+		thr(1, :) = deal(mean(cfg.spi_thr(1,1)*spi_amp_std(contains(chans, cfg.spi_thr_chan))));
+		thr(2, :) = deal(mean(cfg.spi_thr(2,1)*spi_amp_std(contains(chans, cfg.spi_thr_chan))));
+		thr(3, :) = deal(mean(cfg.spi_thr(3,1)*spi_amp_std(contains(chans, cfg.spi_thr_chan))));
+	end
+	
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
 	for iEpoch = 1:size(NREMEpisodes,2)
@@ -507,7 +525,7 @@ if cfg.spi
 			% First threshold criterion
 			% Where does the smoothed envelope cross the threshold?
 			FastSpiAmplitudeTmp = smooth(spi_amp_tmp(iCh, :),0.1 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
-			above_threshold = FastSpiAmplitudeTmp > cfg.spi_thr(1,1)*spi_amp_std(iCh); % long column showing threshold crossings
+			above_threshold = FastSpiAmplitudeTmp > thr(1, iCh); % long column showing threshold crossings
 			isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(1)*Fs, cfg.spi_dur_max(1)*Fs]); % find spindle within duration range
 			isLongEnough = [0; isLongEnough]; %compensate that spindle might start in the beginning
 			SpiBeginning =  strfind(isLongEnough',[0 1]); %find spindle Beginning line before compensates that it find last 0
@@ -520,7 +538,7 @@ if cfg.spi
 				plot(win/Fs, spi_raw(1,win)), hold on			% raw signal
 				plot(win/Fs, spi_amp_tmp(iCh,win), 'r')			% envelope
 				plot(win/Fs, FastSpiAmplitudeTmp(win), 'r')		% smoothed envelope
-				line([win(1)/Fs win(end)/Fs],[cfg.spi_thr(1,1)*spi_amp_std(iCh) cfg.spi_thr(1,1)*spi_amp_std(iCh)]) % threshold
+				line([win(1)/Fs win(end)/Fs],[thr(1, iCh) thr(1, iCh)]) % threshold
 				plot(win/Fs, above_threshold(win))				% threshold crossed
 				plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
 			end
@@ -548,13 +566,13 @@ if cfg.spi
 					FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
 					
 					% Second threshold criterion
-					above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(2,1)*spi_amp_std(iCh);
+					above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(2, iCh);
 					isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(2)*Fs, cfg.spi_dur_max(2)*Fs]); %find spindle within duration range
 					
 					% Third threshold criterion
-					above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(3,1)*spi_amp_std(iCh);
+					above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(3, iCh);
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.spi_dur_max(1)*Fs]); %find spindle within duration range
-					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', cfg.spi_thr(1,1)*spi_amp_std(iCh));
+					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', thr(1, iCh));
 					if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
 						% do nothing
 					else %if criteria not fullfilled store index of Spindles and kill it later
@@ -589,6 +607,7 @@ if cfg.spi
 	output.spi.events_perNREMep	= spi';
 	output.spi.amp_std			= spi_amp_std;
 	output.spi.amp_mean			= spi_amp_mean;
+	output.spi.thr				= thr;
 	clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
 end
 
