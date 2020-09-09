@@ -133,7 +133,7 @@ set(h, 'Position', get(0, 'Screensize')); % fullscreen
 % Left: Scoring and event distribution
 subplot(num_chans*num_pnl,num_col,splts_l)
 if isfield(output.info, 'name') && ~isempty(output.info.name)
-	title(['Dataset: ' output.info.name ', recording length: ' num2str(output.info.length / output.info.Fs/60) ' min'])
+	title(['Data: ' output.info.name ', recording length: ' num2str(output.info.length / output.info.Fs/60) ' min'], 'Interpreter', 'none')
 else
 	title(['Recording length: ' num2str(output.info.length / output.info.Fs/60) ' min'])
 end 
