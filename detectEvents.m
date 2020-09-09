@@ -556,7 +556,7 @@ if cfg.spi
 					above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(3,1)*spi_amp_std(iCh);
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.spi_dur_max(1)*Fs]); %find spindle within duration range
 					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', cfg.spi_thr(1,1)*spi_amp_std(iCh));
-					if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
+					if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<0.125 * Fs %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
 						% do nothing
 					else %if criteria not fullfilled store index of Spindles and kill it later
 						TempIdx = [TempIdx iSpi];
