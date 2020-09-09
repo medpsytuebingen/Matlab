@@ -26,6 +26,7 @@ function output = detectEvents(cfg, data)
 % data							Fieldtrip raw data structure, should contain a single trial
 %								Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
 % cfg
+% .name							string (optional); dataset identifier, will be forwarded to output.info
 % .scoring						int array (num_epochs x 1)
 % .scoring_epoch_length			int; length of scoring epochs in sec
 % .code_NREM					int or int array; NREM sleep stages to use for detection (usually [2 3 4] for humans, 2 for animals)
@@ -149,12 +150,12 @@ if isfield(cfg, 'artfctdef') && ~isfield(cfg, 'artfctpad')
 end
 
 % Set default values - spectrum % TODO: Add to documentation
-if ~isfield(cfg, 'spectrum') % 
-	cfg.spectrum				= 0; 
+if ~isfield(cfg, 'spectrum') %
+	cfg.spectrum				= 0;
 end
 if isfield(cfg, 'spi_indiv') && cfg.spi_indiv
 	disp('If individual spindle peaks are requested, the spectrum is always calculated.')
-	cfg.spectrum				= 1; 
+	cfg.spectrum				= 1;
 end
 
 % Set default values - slow oscillations/slow waves
@@ -247,7 +248,6 @@ if ~isfield(cfg, 'the_filt_ord')
 	cfg.the_filt_ord			= 3;
 end
 
-
 % Start filling the output
 output						= [];
 output.info.cfg				= cfg;
@@ -255,6 +255,7 @@ output.info.Fs				= Fs;
 output.info.length			= size(data.trial{1},2);
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
+output.info.name			= cfg.name;
 
 %% PREPARATIONS
 chans						= data.label;
