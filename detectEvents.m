@@ -148,6 +148,9 @@ if isfield(cfg, 'artfctdef') && ~isfield(cfg, 'artfctpad')
 end
 
 % Set default values - spectrum
+if ~isfield(cfg, 'name') % 
+	cfg.name					= []; 
+end
 if ~isfield(cfg, 'spectrum') % 
 	cfg.spectrum				= 0; 
 end
