@@ -26,7 +26,7 @@ function output = detectEvents(cfg, data)
 % data							Fieldtrip raw data structure, should contain a single trial
 %								Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
 % cfg
-% .name							string (optional); dataset identifier, will be forwarded to output.info
+% .name							string (optional); dataset identifier, will be forwarded to output.info 
 % .scoring						int array (num_epochs x 1)
 % .scoring_epoch_length			int; length of scoring epochs in sec
 % .code_NREM					int or int array; NREM sleep stages to use for detection (usually [2 3 4] for humans, 2 for animals)
@@ -104,14 +104,12 @@ function output = detectEvents(cfg, data)
 % function that tells you for each sample whether its solid in a sleep
 % stage: isStage(FT-Structure, sample, boundary_in_sec)
 % . Polaritaet checkcen (EEG vs. invasive)
-% . describe input and output in documentation
 % . add further dataset information to .info
 % . slow spindles 8-12 hz
 % . rework variable naming inside function and output
 % . rework output: all data in one row per channel, also per ep and for
 % entire recording
 % . add from hongis code: merging of close events?
-% . add cfg option to turn on detections of each type
 % . let people choose whether to compute threshold for each or all channels
 % . input range for data must be defined (micro or milli volts) Neuralynx
 % creates files with mV!!!
@@ -149,13 +147,13 @@ if isfield(cfg, 'artfctdef') && ~isfield(cfg, 'artfctpad')
 	cfg.artfctpad = 0.5;
 end
 
-% Set default values - spectrum % TODO: Add to documentation
-if ~isfield(cfg, 'spectrum') %
-	cfg.spectrum				= 0;
+% Set default values - spectrum
+if ~isfield(cfg, 'spectrum') % 
+	cfg.spectrum				= 0; 
 end
 if isfield(cfg, 'spi_indiv') && cfg.spi_indiv
 	disp('If individual spindle peaks are requested, the spectrum is always calculated.')
-	cfg.spectrum				= 1;
+	cfg.spectrum				= 1; 
 end
 
 % Set default values - slow oscillations/slow waves
@@ -172,7 +170,7 @@ if ~isfield(cfg, 'slo_thr')
 	cfg.slo_thr					= 1.5; % in SD; nn: 1, 1.5, 2; hongi 1.5 (with rms)
 end
 if ~isfield(cfg, 'slo_peak2peak_min')
-	cfg.slo_peak2peak_min       = 0.07; %in same scaling as recoprding!
+	cfg.slo_peak2peak_min       = 0.07; % in same scaling as recoprding!
 end
 if ~isfield(cfg, 'slo_freq')
 	cfg.slo_freq				= [0.1 3.5]; % in Hz
@@ -472,122 +470,15 @@ if cfg.spi
 	
 	% Find individual spindle peaks
 	if cfg.spi_indiv
-		% TODO: If spectrum was calculated above, use that data; maybe force spectrum if spi_indiv
-		% Cut out NREM episodes
-		cfg_tmp				= [];
-		cfg_tmp.trl			= [NREMEpisodes'*Fs zeros(size(NREMEpisodes,2),1)];
-		data_nrem			= ft_redefinetrial(cfg_tmp, data);
-		
-		% Partition data into segments (gives more reliable power estimates)
-		cfg_tmp				= [];
-		cfg_tmp.length		= 4; % should suffice for good spectral resolution
-		cfg_tmp.overlap     = 0;
-		data_nrem			= ft_redefinetrial(cfg_tmp, data);
-		
-		% Determine resampling frequency	TODO: Test this
-		if Fs > 128
-			if mod(Fs, 100) == 0
-				res_freq = 100;
-			elseif mod(Fs, 125) == 0
-				res_freq = 125;
-			elseif mod(Fs, 128) == 0
-				res_freq = 128;
-			else
-				error('You got some weird sampling frequency, check out this part of the code and make your own decisions.')
-			end
-			
-			% Resample data (improves performance)
-			cfg_tmp				= [];
-			cfg_tmp.resamplefs  = res_freq;
-			data_nrem			= ft_resampledata(cfg_tmp, data_nrem);
-		end
-		
-		% Perform spectral analysis (both IRASA fractal component and regular spectrum)
-		cfg_tmp				= [];
-		cfg_tmp.foi			= cfg.spi_freq(1):0.1:cfg.spi_freq(2); % .1 Hz sampling should be fine
-		
-		cfg_tmp.taper		= 'hanning';
-		cfg_tmp.pad			= 'nextpow2';
-		cfg_tmp.keeptrials	= 'no';
-		cfg_tmp.channel		= cfg.spi_indiv_chan;
-		cfg_tmp.method		= 'irasa';
-		fra					= ft_freqanalysis(cfg_tmp, data_nrem);
-		cfg_tmp.method		= 'mtmfft';
-		mix					= ft_freqanalysis(cfg_tmp, data_nrem);
-		
-		% Average over channels
-		cfg_tmp				= [];
-		cfg_tmp.avgoverchan = 'yes';
-		mix					= ft_selectdata(cfg_tmp,mix);
-		fra					= ft_selectdata(cfg_tmp,fra);
-		
-		% Subtract fractal component from mixed power spectrum
-		cfg_tmp				= [];
-		cfg_tmp.parameter	= 'powspctrm';
-		cfg_tmp.operation   = 'x2-x1';
-		osc					= ft_math(cfg_tmp, fra, mix);
-		
-		% Calculate relative change
-		cfg_tmp.operation	= 'divide';
-		chan				= ft_math(cfg_tmp, osc, fra);
-		
-		% Find peaks
-		[m,mi] = max(chan.powspctrm);
-		spi_freq_indiv = [chan.freq(mi)-cfg.spi_indiv_win chan.freq(mi)+cfg.spi_indiv_win];
-		
-		% Debugging plots
-		if cfg.debugging == 1
-			% Use a wider range for power estimate for these plots to make more
-			% sense (see comments)
-			figure
-			subplot(4,3,[1 2])
-			plot(fra.freq, mix.powspctrm(1,:))
-			title('mixed spectrum')
-			xlim([fra.freq(1) fra.freq(end)])
-			ylim([0 15])
-			subplot(4,3,[4 5])
-			plot(fra.freq, fra.powspctrm(1,:))
-			title('fractal component')
-			xlim([fra.freq(1) fra.freq(end)])
-			ylim([0 25])
-			subplot(4,3,[7 8])
-			plot(fra.freq, osc.powspctrm(1,:))
-			title('oscillatory component')
-			xlim([fra.freq(1) fra.freq(end)])
-			ylim([0 10])
-			subplot(4,3,[10 11])
-			plot(fra.freq, chan.powspctrm(1,:))
-			title('oscillatory component / fractal component')
-			xlim([fra.freq(1) fra.freq(end)])
-			
-			zoom = fra.freq>10 & fra.freq < 18;
-			zoomed = fra.freq(zoom);
-			
-			subplot(4,3,[3])
-			plot(zoomed, mix.powspctrm(1,zoom)), hold on
-			[m,mi] = max(mix.powspctrm(zoom));
-			xline(zoomed(mi))
-			title('mixed spectrum')
-			xlim([zoomed(1) zoomed(end)])
-			subplot(4,3,[6])
-			plot(zoomed, fra.powspctrm(1,zoom))
-			xlim([zoomed(1) zoomed(end)])
-			title('fractal component')
-			subplot(4,3,[9])
-			plot(zoomed, osc.powspctrm(1,zoom)), hold on
-			xlim([zoomed(1) zoomed(end)])
-			[m,mi] = max(osc.powspctrm(zoom));
-			xline(zoomed(mi))
-			title('oscillatory component')
-			subplot(4,3,[12])
-			plot(zoomed, chan.powspctrm(1,zoom)), hold on
-			[m,mi] = max(chan.powspctrm(zoom));
-			xline(zoomed(mi))
-			xlim([zoomed(1) zoomed(end)])
-			title('oscillatory component / fractal component')
-		end
+		% Extract search window, average existing relative spectrum over channels, find maximum
+		tmp_freqi		= output.spectrum.freq >= cfg.spi_freq(1) & output.spectrum.freq <= cfg.spi_freq(2);
+		tmp_rel			= mean(output.spectrum.rel_nrem(contains(chans, cfg.spi_indiv_chan), tmp_freqi), 1);
+		[~,mi]			= max(tmp_rel);
+		spi_freq_indiv	= [chan.freq(mi)-cfg.spi_indiv_win chan.freq(mi)+cfg.spi_indiv_win];
+		clear tmp_freqi tmp_rel mi
 	end
 	
+	% Filter data in spindle band, extract mean and std
 	cfg_pp				= [];
 	cfg_pp.bpfilter		= 'yes';
 	if cfg.spi_indiv
