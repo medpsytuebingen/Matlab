@@ -68,6 +68,7 @@ function output = detectEvents(cfg, data)
 % .spi_indiv_chan				cell array with string; channels for estimating spindle peak frequency; you probably dont want to mix far away channels here
 %
 % Parameters ripple detection:
+% .rip                          logical; turns ripple detection on (1) or off (0); default: 0
 % .rip_control_Chan             Channel name of the channel used as control for ripple detection.
 %
 % Parameters theta amplitude:
