@@ -430,7 +430,8 @@ if cfg.spectrum
 	cfg_tmp.taper 				= 'hanning';
 	mix_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
 	mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
-	
+	clear tmp_nrem tmp_rem
+
 	% Calculate the oscillatory component by subtracting the fractal from the
 	% mixed component
 	cfg_tmp						= [];
@@ -474,10 +475,10 @@ if cfg.spi
 	% Find individual spindle peaks
 	if cfg.spi_indiv
 		% Extract search window, average existing relative spectrum over channels, find maximum
-		tmp_freqi		= output.spectrum.freq >= cfg.spi_freq(1) & output.spectrum.freq <= cfg.spi_freq(2);
+		tmp_freqi		= find(output.spectrum.freq >= cfg.spi_freq(1) & output.spectrum.freq <= cfg.spi_freq(2));
 		tmp_rel			= mean(output.spectrum.rel_nrem(contains(chans, cfg.spi_indiv_chan), tmp_freqi), 1);
-		[~,mi]			= max(tmp_rel);
-		spi_freq_indiv	= [chan.freq(mi)-cfg.spi_indiv_win chan.freq(mi)+cfg.spi_indiv_win];
+		[~,mi]			= max(tmp_rel); % peak index among selected freqs
+		spi_freq_indiv	= [output.spectrum.freq(tmp_freqi(1)+mi-1)-cfg.spi_indiv_win output.spectrum.freq(tmp_freqi(1)+mi-1)+cfg.spi_indiv_win];
 		clear tmp_freqi tmp_rel mi
 	end
 	
