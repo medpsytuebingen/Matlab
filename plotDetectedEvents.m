@@ -289,6 +289,7 @@ if spectrum
 		title(sprintf('\n Spectrum NREM sleep'))
 		legend(output.info.channel{:})
 		xlim([1 35]) % thats where the really interesting stuff happens
+		s1.Position = [s1.Position(1) s1.Position(2)-.04 s1.Position(3) s1.Position(4)]; % shift subplot a bit down to prevent overlaps
 	end
 	
 	% Right: REM
@@ -298,13 +299,14 @@ if spectrum
 		ylim([-1 max(max(output.spectrum.rel_rem(:, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
 		ylabel('Oscillatory relative to fractal component')
 		legend(output.info.channel{:})
+		xlim([1 35]) % thats where the really interesting stuff happens
 		title(sprintf('\n Spectrum REM sleep'))
+		s2.Position = [s2.Position(1) s2.Position(2)-.04 s1.Position(3) s2.Position(4)];  % shift subplot a bit down to prevent overlaps
 	end
 end
 
-% Shift both subplots a but down to make everything look better
-s1.Position = [s1.Position(1) s1.Position(2)-.04 s1.Position(3) s1.Position(4)];
-s2.Position = [s2.Position(1) s2.Position(2)-.04 s1.Position(3) s2.Position(4)];
+
+
 
 %% Save the plot
 if nargin > 1 && ~isempty(path_plot)
