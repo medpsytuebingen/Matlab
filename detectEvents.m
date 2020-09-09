@@ -192,7 +192,7 @@ end
 if ~isfield(cfg, 'spi_dur_max')
 	cfg.spi_dur_max				= [2.5 2.5];
 end
-if ~isfield(cfg, 'spi_thr')
+if ~isfield(cfg, 'spi_thr')     % to do: for consistency, all input arrays should be row vectors (also e.g., spi_thr)
 	cfg.spi_thr(1,1)			= 1.5; % nn: 1, 1.5, 2; hongi 1.5 (with rms)
 	cfg.spi_thr(2,1)			= 2;
 	cfg.spi_thr(3,1)			= 2.5;
@@ -229,7 +229,7 @@ if ~isfield(cfg, 'rip_filt_ord')
 	cfg.rip_filt_ord			= 3;
 end
 if ~isfield(cfg, 'rip_thr')
-	cfg.rip_thr					= [2; 5]; % to do: for consistency, all input arrays should be row vectors (also e.g., spi_thr)
+	cfg.rip_thr					= [2 5]; 
 end
 if ~isfield(cfg, 'rip_dur_min')
 	cfg.rip_dur_min				= 0.03;
@@ -875,7 +875,7 @@ if cfg.rip
 			% First threshold criterion for min duration
 			% Where does the smoothed envelope cross the threshold?
 			RipAmplitudeTmp = smooth(rip_amp_tmp(iCh, :),0.004 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
-			above_threshold = RipAmplitudeTmp > cfg.rip_thr(1,1)*rip_amp_std(iCh); % long column showing threshold crossings
+			above_threshold = RipAmplitudeTmp > cfg.rip_thr(1)*rip_amp_std(iCh); % long column showing threshold crossings
 			isLongEnough = bwareafilt(above_threshold, [cfg.rip_dur_min(1)*Fs, cfg.rip_dur_max(1)*Fs]); % find ripple within duration range
 			isLongEnough = [0; isLongEnough]; %compensate that ripple might start in the beginning
 			ripBeginning =  strfind(isLongEnough',[0 1]); %find ripple Beginning line before compensates that it find last 0
@@ -913,15 +913,14 @@ if cfg.rip
 				window_size = 0.5 * Fs; % in sec
 				if  CurrentRipples(2,irip)+window_size < length(data_rip.trial{1}(iCh,:)) %check for distance to recording end
 					DataTmprip = data_rip.trial{1}(iCh, CurrentRipples(1,irip)-window_size : CurrentRipples(2,irip)+window_size); %get filteres ripple signal for eachripple + - 5sec
-					RipAmplitudeTmp = smooth(abs(hilbert(DataTmprip)),40);%get smoothed instantaneous amplitude
+					RipAmplitudeTmp = smooth(abs(hilbert(DataTmprip')),0.004*Fs);%get smoothed instantaneous amplitude
 					
 					% Second Peak threshold criterion
-					above_Max = RipAmplitudeTmp(window_size:end-window_size) > cfg.rip_thr(2,1)*rip_amp_std(iCh);
+					above_Max = RipAmplitudeTmp(window_size:end-window_size) > cfg.rip_thr(2)*rip_amp_std(iCh);
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.rip_dur_max(1)*Fs]); %find ripple within duration range
-					[pks,locs] = findpeaks(DataTmprip(1, window_size:end-window_size),'MinPeakProminence', cfg.rip_thr(1,1)*rip_amp_std(iCh));
-					if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<100 %check if long enough ripple is present and check that no peak to peak distance is more than 125ms
+					if sum(double(MaxIsThere))>=1 %check if Max Amplitude is high enough 
 						% do nothing
-					else %if criteria not fullfilled store index of ripples and kill it later
+					else %if criteria not fullfilled store index of ripple and kill it later
 						TempIdx = [TempIdx irip];
 					end
 					if isfield(cfg,'rip_control_Chan') && strcmp(data_rip.label{iCh},cfg.rip_control_Chan)%check for detected common noise in control channel
@@ -936,7 +935,7 @@ if cfg.rip
 				end
 			end
 			
-			rip{iEpoch,iCh}(:,TempIdx)=[];%if not criteriy fullfilled delete detected ripple
+			rip{iEpoch,iCh}(:,TempIdx)=[];%if criteria is not fullfilled delete detected ripple
 		end
 	end
 	
