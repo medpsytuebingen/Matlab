@@ -329,16 +329,20 @@ end
 NREMEpisodes = [(NREMBegEpisode-1)*cfg.scoring_epoch_length+1; NREMEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
 
 % REM
-REMBegEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[0 1]);
-REMEndEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[1 0]);
-REMBegEpisode = REMBegEpisode+1;
-if any(cfg.scoring(1,1)==cfg.code_REM,2)
-	REMBegEpisode = [1 REMBegEpisode];
+if ~isempty(cfg.code_REM)
+	REMBegEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[0 1]);
+	REMEndEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[1 0]);
+	REMBegEpisode = REMBegEpisode+1;
+	if any(cfg.scoring(1,1)==cfg.code_REM,2)
+		REMBegEpisode = [1 REMBegEpisode];
+	end
+	if any(cfg.scoring(end,1)==cfg.code_REM,2)
+		REMEndEpisode = [REMEndEpisode length(cfg.scoring)];
+	end
+	REMEpisodes = [(REMBegEpisode-1)*cfg.scoring_epoch_length+1; REMEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
+else
+	REMEpisodes = [];
 end
-if any(cfg.scoring(end,1)==cfg.code_REM,2)
-	REMEndEpisode = [REMEndEpisode length(cfg.scoring)];
-end
-REMEpisodes = [(REMBegEpisode-1)*cfg.scoring_epoch_length+1; REMEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
 
 % Wake
 WAKBegEpisode = strfind((cfg.scoring==cfg.code_WAKE)',[0 1]);
@@ -351,6 +355,8 @@ if cfg.scoring(end,1) == cfg.code_WAKE
 	WAKEndEpisode = [WAKEndEpisode length(cfg.scoring)];
 end
 WAKEpisodes = [(WAKBegEpisode-1)*cfg.scoring_epoch_length+1; WAKEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
+
+if isempty(REMEpisodes), rem = 0; else, rem = 1; end % in case there is no REM sleep
 
 % Fill the output
 output.info.channel			= chans;
@@ -376,22 +382,28 @@ if cfg.spectrum
 	end
 	
 	% REM episodes in sample resolution
-	rem_begs = strfind(any(scoring_fine==cfg.code_REM,2)',[0 1]); % where does scoring flip to NREM
-	rem_ends = strfind(any(scoring_fine==cfg.code_REM,2)',[1 0]); % where does scoring flip from NREM to something else
-	rem_begs = rem_begs+1; % because it always finds the sample before
-	if any(scoring_fine(1,1)==cfg.code_REM,2) % in case recording starts with this stage
-		rem_begs = [1 rem_begs];
-	end
-	if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording starts with this stage
-		rem_ends = [rem_ends length(scoring_fine)];
+	if rem
+		rem_begs = strfind(any(scoring_fine==cfg.code_REM,2)',[0 1]); % where does scoring flip to NREM
+		rem_ends = strfind(any(scoring_fine==cfg.code_REM,2)',[1 0]); % where does scoring flip from NREM to something else
+		rem_begs = rem_begs+1; % because it always finds the sample before
+		if any(scoring_fine(1,1)==cfg.code_REM,2) % in case recording starts with this stage
+			rem_begs = [1 rem_begs];
+		end
+		if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording starts with this stage
+			rem_ends = [rem_ends length(scoring_fine)];
+		end
+	else
+		rem_begs = []; rem_ends = [];
 	end
 	
 	% Cut out NREM and REM segemnts
 	cfg_tmp						= [];
 	cfg_tmp.trl					= [nrem_begs' nrem_ends' zeros(length(nrem_ends'),1)];
 	tmp_nrem					= ft_redefinetrial(cfg_tmp, data);
-	cfg_tmp.trl					= [rem_begs' rem_ends' zeros(length(rem_ends'),1)];
-	tmp_rem						= ft_redefinetrial(cfg_tmp, data);
+	if rem
+		cfg_tmp.trl					= [rem_begs' rem_ends' zeros(length(rem_ends'),1)];
+		tmp_rem						= ft_redefinetrial(cfg_tmp, data);
+	end
 	
 	% Downsample data to speed up spectral estimates (done before cutting
 	% in smaller segments is orders of magnitudes faster)
@@ -410,7 +422,9 @@ if cfg.spectrum
 		cfg_tmp				= [];
 		cfg_tmp.resamplefs  = res_freq;
 		tmp_nrem			= ft_resampledata(cfg_tmp, tmp_nrem);
-		tmp_rem				= ft_resampledata(cfg_tmp, tmp_rem);
+		if rem
+			tmp_rem				= ft_resampledata(cfg_tmp, tmp_rem);
+		end
 	end
 	
 	% Cut into small segments (improves and smoothens spectral estimates)
@@ -418,7 +432,9 @@ if cfg.spectrum
 	cfg_tmp.length				= 4;  % cut data into segments of this length (in sec)
 	cfg_tmp.overlap				= 0;  % with this overlap
 	tmp_nrem					= ft_redefinetrial(cfg_tmp, tmp_nrem);
-	tmp_rem						= ft_redefinetrial(cfg_tmp, tmp_rem);
+	if rem
+		tmp_rem						= ft_redefinetrial(cfg_tmp, tmp_rem);
+	end
 	
 	% Calculate spectra
 	cfg_tmp						= [];
@@ -426,12 +442,16 @@ if cfg.spectrum
 	cfg_tmp.method				= 'irasa';
 	cfg_tmp.pad					= 'nextpow2';
 	fra_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
-	fra_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	if rem
+		fra_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	end
 	
 	cfg_tmp.method 				= 'mtmfft';
 	cfg_tmp.taper 				= 'hanning';
 	mix_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
-	mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	if rem
+		mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	end
 	clear tmp_nrem tmp_rem
 
 	% Calculate the oscillatory component by subtracting the fractal from the
@@ -440,22 +460,28 @@ if cfg.spectrum
 	cfg_tmp.parameter			= 'powspctrm';
 	cfg_tmp.operation			= 'subtract';
 	osc_nrem					= ft_math(cfg_tmp, mix_nrem, fra_nrem);
-	osc_rem						= ft_math(cfg_tmp, mix_rem, fra_rem);
+	if rem
+		osc_rem						= ft_math(cfg_tmp, mix_rem, fra_rem);
+	end
 	
 	% Use percent change for even more obvious peaks
 	cfg_tmp.operation			= 'divide';
 	rel_nrem					= ft_math(cfg_tmp, osc_nrem, fra_nrem);
-	rel_rem						= ft_math(cfg_tmp, osc_rem, fra_rem);
+	if rem
+		rel_rem						= ft_math(cfg_tmp, osc_rem, fra_rem);
+	end
 	
 	output.spectrum.fra_nrem	= fra_nrem.powspctrm;
-	output.spectrum.fra_rem		= fra_rem.powspctrm;
 	output.spectrum.mix_nrem	= mix_nrem.powspctrm;
-	output.spectrum.mix_rem		= mix_rem.powspctrm;
 	output.spectrum.osc_nrem	= osc_nrem.powspctrm;
-	output.spectrum.osc_rem		= osc_rem.powspctrm;
 	output.spectrum.rel_nrem	= rel_nrem.powspctrm;
-	output.spectrum.rel_rem		= rel_rem.powspctrm;
 	output.spectrum.freq		= fra_nrem.freq; % add frequency vector
+	if rem
+		output.spectrum.fra_rem		= fra_rem.powspctrm;
+		output.spectrum.mix_rem		= mix_rem.powspctrm;
+		output.spectrum.osc_rem		= osc_rem.powspctrm;
+		output.spectrum.rel_rem		= rel_rem.powspctrm;
+	end
 	
 	if cfg.debugging
 		figure
@@ -880,7 +906,9 @@ end
 
 %% Theta
 % Calculates theta amplitude during REM
-if cfg.the
+if cfg.the && ~rem
+	warning('Theta amplitude requested but no REM in data. Skipping...')
+elseif cfg.the
 	disp('Starting computation of theta amplitude...')
 	
 	cfg_pp				= [];
