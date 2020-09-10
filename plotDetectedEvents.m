@@ -37,6 +37,16 @@ if isfield(output, 'spi')
 else
 	spi						= 0;
 end
+if isfield(output, 'rip')
+	rip						= 1;
+	det_rip					= output.rip.events;
+	% Find center of each ripple
+	for iCh = 1:numel(det_rip)
+		det_rip{iCh} = det_rip{iCh}(1,:) + (det_rip{iCh}(2,:) - det_rip{iCh}(1,:))/2;
+	end
+else
+	rip						= 0;
+end
 if isfield(output, 'spectrum')
 	spectrum				= 1;
 else
@@ -176,7 +186,15 @@ if spi
 		clear temphandle
 	end
 end
-
+if rip
+	for iCh = 1:num_chans
+		temphandle      = plot(det_rip{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.04, 'go'); hold on
+		if iCh == 1
+			handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
+		end
+		clear temphandle
+	end
+end
 % Labels, title, legend
 ylim([lineHeight_hyp - (0.1*num_chans)-0.1 .2])
 xlabel('Time (in min)')
@@ -184,12 +202,16 @@ xlim([0 inf])
 set(gca,'YTick', [])
 set(gca,'YTickLabel', [])
 ylabel('Channels (in the order provided)');
-if slo && spi
+if slo && spi && rip
+	leg_str = {'SOs', 'Spindles', 'Ripples'};
+elseif slo && spi
 	leg_str = {'SOs', 'Spindles'};
 elseif slo
 	leg_str = {'SOs'};
 elseif spi
 	leg_str = {'Spindles'};
+elseif rip
+	leg_str = {'Ripples'};
 else
 	leg_str = {};
 end
