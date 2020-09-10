@@ -446,6 +446,7 @@ if cfg.spectrum
 	if rem
 		fra_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
 	end
+
 	
 	cfg_tmp.method 				= 'mtmfft';
 	cfg_tmp.taper 				= 'hanning';
@@ -453,6 +454,7 @@ if cfg.spectrum
 	if rem
 		mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
 	end
+
 	clear tmp_nrem tmp_rem
 
 	% Calculate the oscillatory component by subtracting the fractal from the
@@ -543,7 +545,7 @@ if cfg.spi
 		thr(2, :) = deal(mean(cfg.spi_thr(2,1)*spi_amp_std(contains(chans, cfg.spi_thr_chan))));
 		thr(3, :) = deal(mean(cfg.spi_thr(3,1)*spi_amp_std(contains(chans, cfg.spi_thr_chan))));
 	end
-	
+
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
 	for iEpoch = 1:size(NREMEpisodes,2)
@@ -553,6 +555,7 @@ if cfg.spi
 			% Where does the smoothed envelope cross the threshold?
 			FastSpiAmplitudeTmp = smooth(spi_amp_tmp(iCh, :),0.1 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
 			above_threshold = FastSpiAmplitudeTmp > thr(1, iCh); % long column showing threshold crossings
+
 			isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(1)*Fs, cfg.spi_dur_max(1)*Fs]); % find spindle within duration range
 			isLongEnough = [0; isLongEnough]; %compensate that spindle might start in the beginning
 			SpiBeginning =  strfind(isLongEnough',[0 1]); %find spindle Beginning line before compensates that it find last 0
@@ -569,12 +572,13 @@ if cfg.spi
 				plot(win/Fs, above_threshold(win))				% threshold crossed
 				plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
 			end
-			% Delete spindle if it is cut by end or beginning of epoch
+
+      % Delete spindle if it is cut by end or beginning of epoch
 			if ~isempty(SpiBeginning) || ~isempty(SpiEnd)
-				if length(SpiEnd)<length(SpiBeginning)
+				if length(SpiEnd)<length(SpiBeginning) % if at the end
 					SpiBeginning(:,end)=[];
 				end
-				if SpiBeginning(1,1)==1
+				if SpiBeginning(1,1)==1 % ...or the beginning
 					SpiBeginning(:,1) = [];
 					SpiEnd(:,1) = [];
 				end
@@ -600,6 +604,7 @@ if cfg.spi
 					above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(3, iCh);
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.spi_dur_max(1)*Fs]); %find spindle within duration range
 					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', thr(1, iCh));
+
 					if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<0.125 * Fs %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
 						% do nothing
 					else %if criteria not fullfilled store index of Spindles and kill it later
@@ -640,6 +645,7 @@ if cfg.spi
     else
         clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
 	end
+
 end
 
 %% SOs
@@ -666,7 +672,7 @@ if cfg.slo
 			slo_tmp			= slo_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs)';
 			SOBegEpisode	= strfind((slo_tmp<-SoThreshold)',[0 1])-1;
 			SOEndEpisode	= strfind((slo_tmp<-SoThreshold)',[1 0]);
-			if slo_tmp(1) < -SoThreshold % if NREMepisode starts under the threshold, throw away that find
+			if slo_tmp(1) < -SoThreshold % if NREMepisode starts under the threshold, throw away that find (might be redundant to an exclusion done earlier
 				SOEndEpisode(1) = [];
 			end
 			% Double-check found events

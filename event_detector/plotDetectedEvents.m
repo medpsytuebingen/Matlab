@@ -70,7 +70,6 @@ epochLength                 = output.info.scoring_epoch_length;
 %% PREPARATIONS
 % Translate hypnogram to seconds
 % TODO: Why are we doing this? Legacy reason?
-% TODO: Dynamic mapping of provided stages to correct legend entry (currently, if code_NREM is [2 3 4], these will become S1 S2 S3
 hypnogram_plot = [];
 for iStNREM = 1:length(output.info.cfg.code_NREM) %create based on number of NREM stages
 	hypnogram_plot.(strcat('S',num2str(output.info.cfg.code_NREM(iStNREM)))) = [];

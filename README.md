@@ -1,8 +1,10 @@
 # Matlab
 Matlab scripts commonly used in the Institute of Medical Psychology Tuebingen
 
-`detectEvents` / `plotDetectedEvents`  
+## /event_detector/
 Detect spindles and slow oscillations in fieldtrip data structures.  
+
+`detectEvents` / `plotDetectedEvents`  
 Example code to call these functions:   
 ```Matlab
   cfg	= [];
@@ -31,6 +33,9 @@ Example code to call these functions:
 The output should look something like this:
 ![Example Output](images/output_plotDetectedEvents.png)
 
+
+## /helper_functions/
+Little helper functions that can improve your life as a sleep researcher.
 
 `get_filenames`  
 Returns a properly sorted list of files in a given folder (excluding subfolders, mac trash files etc.) or one filename starting with a matching string or the filename of the nth file in that folder.
