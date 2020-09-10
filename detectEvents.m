@@ -688,14 +688,21 @@ if cfg.slo
 		for iEvent = 1: size(ZeroCrossings{iCh,1},2)
 			[M,I] = min(slo_raw(iCh, ZeroCrossings{iCh,1}(1,iEvent):ZeroCrossings{iCh,1}(2,iEvent)),[],2);
 			NegativePeaks{iCh,1}(iEvent,1) = ZeroCrossings{iCh,1}(1,iEvent)+I;
-		end
+        end
 		
 		% Calculate waveforms
-		twindow						= 2.5; % data will be +/- twindow
-		SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),round(twindow*2*Fs + 1));
-		for iSO = 1:size(NegativePeaks{iCh,1},1)
-			SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
-		end
+        twindow						= 2.5; % data will be +/- twindow
+        SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),round(twindow*2*Fs + 1));
+        for iSO = 1:size(NegativePeaks{iCh,1},1)
+            if NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs) < length(slo_raw)%delete Event that is to close to recording end
+                NegativePeaks{iCh,1}(iSO,:) = [];
+                ZeroCrossings{iCh,1}(:,iSO) = [];
+                Peak2PeakAmp{iCh,1}(iSO,:)  = [];
+                SOGA{iCh,1}(iSO,:)          = [];
+            else
+                SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
+            end
+        end
 		
 		% SO-spindle coupling
 		if cfg.spi && size(output.spi.events{iCh},2) > 0 % if there are spindles in this channel
