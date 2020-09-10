@@ -16,6 +16,8 @@ function plotDetectedEvents(output, path_plot)
 % OUTPUT VARIABLES:
 % -
 %
+% TO DO: 
+%
 % AUTHOR:
 % Jens Klinzing, klinzing@princeton.edu
 
@@ -70,50 +72,37 @@ epochLength                 = output.info.scoring_epoch_length;
 % TODO: Why are we doing this? Legacy reason?
 % TODO: Dynamic mapping of provided stages to correct legend entry (currently, if code_NREM is [2 3 4], these will become S1 S2 S3
 hypnogram_plot = [];
-hypnogram_plot.Wake = [];
 for iStNREM = 1:length(output.info.cfg.code_NREM) %create based on number of NREM stages
-    hypnogram_plot.(strcat('S',num2str(iStNREM))) = [];
+	hypnogram_plot.(strcat('S',num2str(output.info.cfg.code_NREM(iStNREM)))) = [];
 end
 hypnogram_plot.REM = [];
+hypnogram_plot.Wake = [];
 
+% NREM
 for iSt = 1:length(hypnogram)
-    sec = (iSt-1)*epochLength+1;    % translate the current position into seconds
-    if hypnogram(iSt) == output.info.cfg.code_WAKE(1)
-        for iEp = sec:sec+epochLength-1
-            hypnogram_plot.Wake(end+1)      = iEp;
-        end
-	end
-    if hypnogram(iSt) == output.info.cfg.code_NREM(1)
-        for iEp = sec:sec+epochLength-1
-            hypnogram_plot.S1(end+1)    = iEp;
-        end
-	end
-    if length(output.info.cfg.code_NREM)>=2
-        if hypnogram(iSt) == output.info.cfg.code_NREM(2)
-            for iEp = sec:sec+epochLength-1
-                hypnogram_plot.S2(end+1)    = iEp;
-            end
+	sec = (iSt-1)*epochLength+1;    % translate the current position into seconds
+	for iEntry = 1:numel(output.info.cfg.code_NREM)
+		if hypnogram(iSt) == output.info.cfg.code_NREM(iEntry)
+			for iEp = sec:sec+epochLength-1
+				tmpstr = strcat('S', num2str(output.info.cfg.code_NREM(iEntry)));
+				hypnogram_plot.(tmpstr)(end+1)    = iEp;
+			end
 		end
 	end
-	if length(output.info.cfg.code_NREM)>=3
-        if hypnogram(iSt) == output.info.cfg.code_NREM(3)
-            for iEp = sec:sec+epochLength-1
-                hypnogram_plot.S3(end+1)    = iEp;
-            end
+	
+	% REM
+	if hypnogram(iSt) == output.info.cfg.code_REM(1)
+		for iEp = sec:sec+epochLength-1
+			hypnogram_plot.REM(end+1)   = iEp;
 		end
 	end
-	if length(output.info.cfg.code_NREM)==4
-        if hypnogram(iSt) == output.info.cfg.code_NREM(4)
-            for iEp = sec:sec+epochLength-1
-                hypnogram_plot.S4(end+1)    = iEp;
-            end
-        end
+	
+	% WAKE
+	if hypnogram(iSt) == output.info.cfg.code_WAKE(1)
+		for iEp = sec:sec+epochLength-1
+			hypnogram_plot.Wake(end+1)      = iEp;
+		end
 	end
-    if hypnogram(iSt) == output.info.cfg.code_REM(1)
-        for iEp = sec:sec+epochLength-1
-            hypnogram_plot.REM(end+1)   = iEp;
-        end
-    end
 end
 
 % Delete all empty fields/sleep stages from array
@@ -349,9 +338,6 @@ if spectrum
 		s2.Position = [s2.Position(1) s2.Position(2)-.04 s1.Position(3) s2.Position(4)];  % shift subplot a bit down to prevent overlaps
 	end
 end
-
-
-
 
 %% Save the plot
 if nargin > 1 && ~isempty(path_plot)
