@@ -60,6 +60,8 @@ function output = detectEvents(cfg, data)
 % .spi_thr(1,1)					the signal amplitude STD scaled by this factor will be the *first* amplitude threshold (events must cross this threshold for at least spi_dur_min(1,1) sec); default: 1.5
 % .spi_thr(2,1)					...the *second* threshold (events must cross this threshold for at least spi_dur_min(2,1) sec); default: 2
 % .spi_thr(3,1)					...the *third* threshold (events must cross this threshold at least once); default: 2.5
+% .spi_thr_chan					cell array of strings; list of channels, the average of which will be used to determine the detection threshold; default: []
+%								if empty, the threshold will be determined separately for each channel
 % .spi_freq						int array (1 x 2); frequency range in which to perform detection, default: [12 16])
 %								Note: if cfg.spi_indiv == 1 this will be the range in which the individual spindle frequency peak is termined; filtering will then be performed at this frequency +/- cfg.spi_indiv_win
 % .spi_filt_ord					order of spindle band filter; default: 6
@@ -110,11 +112,8 @@ function output = detectEvents(cfg, data)
 % . rework variable naming inside function and output
 % . rework output: all data in one row per channel, also per ep and for
 % entire recording
-% . add from hongis code: merging of close events?
-% . let people choose whether to compute threshold for each or all channels
-% . input range for data must be defined (micro or milli volts) Neuralynx
-% creates files with mV!!!
-% . SO-check should delete SOs completely (see todo comment)
+% . merging of close events?
+% . NN: SO-check should delete SOs completely (see todo comment)
 % . artifact handling! currently, events are detected based on NREM episodes, which are unaffected by artifacts. only std/amp calculations exclude artifact since they are based on scoring_fine, in which artifacts are marked (99).
 %   one solution possible: add after each event detection another check for any overlaps with artifacts
 %
@@ -155,7 +154,7 @@ end
 if ~isfield(cfg, 'spectrum') % 
 	cfg.spectrum				= 0; 
 end
-if isfield(cfg, 'spi_indiv') && cfg.spi_indiv
+if isfield(cfg, 'spi_indiv') && cfg.spi_indiv && ~cfg.spectrum
 	disp('If individual spindle peaks are requested, the spectrum is always calculated.')
 	cfg.spectrum				= 1; 
 end
@@ -199,6 +198,9 @@ if ~isfield(cfg, 'spi_thr')     % to do: for consistency, all input arrays shoul
 	cfg.spi_thr(3,1)			= 2.5;
 elseif isfield(cfg, 'spi_thr') && length(cfg.spi_thr) ~= 3
 	error('Spindle thresholds not provided properly (should be 3x1 vector in cfg.spi_thr).')
+end
+if ~isfield(cfg, 'spi_thr_chan')
+	cfg.spi_thr_chan			= [];
 end
 if ~isfield(cfg, 'spi_freq')
 	cfg.spi_freq				= [12 16]; % Hz; filtering range for spindle detection
@@ -328,16 +330,20 @@ end
 NREMEpisodes = [(NREMBegEpisode-1)*cfg.scoring_epoch_length+1; NREMEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
 
 % REM
-REMBegEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[0 1]);
-REMEndEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[1 0]);
-REMBegEpisode = REMBegEpisode+1;
-if any(cfg.scoring(1,1)==cfg.code_REM,2)
-	REMBegEpisode = [1 REMBegEpisode];
+if ~isempty(cfg.code_REM)
+	REMBegEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[0 1]);
+	REMEndEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[1 0]);
+	REMBegEpisode = REMBegEpisode+1;
+	if any(cfg.scoring(1,1)==cfg.code_REM,2)
+		REMBegEpisode = [1 REMBegEpisode];
+	end
+	if any(cfg.scoring(end,1)==cfg.code_REM,2)
+		REMEndEpisode = [REMEndEpisode length(cfg.scoring)];
+	end
+	REMEpisodes = [(REMBegEpisode-1)*cfg.scoring_epoch_length+1; REMEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
+else
+	REMEpisodes = [];
 end
-if any(cfg.scoring(end,1)==cfg.code_REM,2)
-	REMEndEpisode = [REMEndEpisode length(cfg.scoring)];
-end
-REMEpisodes = [(REMBegEpisode-1)*cfg.scoring_epoch_length+1; REMEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
 
 % Wake
 WAKBegEpisode = strfind((cfg.scoring==cfg.code_WAKE)',[0 1]);
@@ -350,6 +356,8 @@ if cfg.scoring(end,1) == cfg.code_WAKE
 	WAKEndEpisode = [WAKEndEpisode length(cfg.scoring)];
 end
 WAKEpisodes = [(WAKBegEpisode-1)*cfg.scoring_epoch_length+1; WAKEndEpisode*cfg.scoring_epoch_length]; %create Matrix with NRem on and offset time in sec
+
+if isempty(REMEpisodes), rem = 0; else, rem = 1; end % in case there is no REM sleep
 
 % Fill the output
 output.info.channel			= chans;
@@ -375,22 +383,28 @@ if cfg.spectrum
 	end
 	
 	% REM episodes in sample resolution
-	rem_begs = strfind(any(scoring_fine==cfg.code_REM,2)',[0 1]); % where does scoring flip to NREM
-	rem_ends = strfind(any(scoring_fine==cfg.code_REM,2)',[1 0]); % where does scoring flip from NREM to something else
-	rem_begs = rem_begs+1; % because it always finds the sample before
-	if any(scoring_fine(1,1)==cfg.code_REM,2) % in case recording starts with this stage
-		rem_begs = [1 rem_begs];
-	end
-	if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording starts with this stage
-		rem_ends = [rem_ends length(scoring_fine)];
+	if rem
+		rem_begs = strfind(any(scoring_fine==cfg.code_REM,2)',[0 1]); % where does scoring flip to NREM
+		rem_ends = strfind(any(scoring_fine==cfg.code_REM,2)',[1 0]); % where does scoring flip from NREM to something else
+		rem_begs = rem_begs+1; % because it always finds the sample before
+		if any(scoring_fine(1,1)==cfg.code_REM,2) % in case recording starts with this stage
+			rem_begs = [1 rem_begs];
+		end
+		if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording starts with this stage
+			rem_ends = [rem_ends length(scoring_fine)];
+		end
+	else
+		rem_begs = []; rem_ends = [];
 	end
 	
 	% Cut out NREM and REM segemnts
 	cfg_tmp						= [];
 	cfg_tmp.trl					= [nrem_begs' nrem_ends' zeros(length(nrem_ends'),1)];
 	tmp_nrem					= ft_redefinetrial(cfg_tmp, data);
-	cfg_tmp.trl					= [rem_begs' rem_ends' zeros(length(rem_ends'),1)];
-	tmp_rem						= ft_redefinetrial(cfg_tmp, data);
+	if rem
+		cfg_tmp.trl					= [rem_begs' rem_ends' zeros(length(rem_ends'),1)];
+		tmp_rem						= ft_redefinetrial(cfg_tmp, data);
+	end
 	
 	% Downsample data to speed up spectral estimates (done before cutting
 	% in smaller segments is orders of magnitudes faster)
@@ -409,7 +423,9 @@ if cfg.spectrum
 		cfg_tmp				= [];
 		cfg_tmp.resamplefs  = res_freq;
 		tmp_nrem			= ft_resampledata(cfg_tmp, tmp_nrem);
-		tmp_rem				= ft_resampledata(cfg_tmp, tmp_rem);
+		if rem
+			tmp_rem				= ft_resampledata(cfg_tmp, tmp_rem);
+		end
 	end
 	
 	% Cut into small segments (improves and smoothens spectral estimates)
@@ -417,7 +433,9 @@ if cfg.spectrum
 	cfg_tmp.length				= 4;  % cut data into segments of this length (in sec)
 	cfg_tmp.overlap				= 0;  % with this overlap
 	tmp_nrem					= ft_redefinetrial(cfg_tmp, tmp_nrem);
-	tmp_rem						= ft_redefinetrial(cfg_tmp, tmp_rem);
+	if rem
+		tmp_rem						= ft_redefinetrial(cfg_tmp, tmp_rem);
+	end
 	
 	% Calculate spectra
 	cfg_tmp						= [];
@@ -425,12 +443,18 @@ if cfg.spectrum
 	cfg_tmp.method				= 'irasa';
 	cfg_tmp.pad					= 'nextpow2';
 	fra_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
-	fra_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	if rem
+		fra_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	end
+
 	
 	cfg_tmp.method 				= 'mtmfft';
 	cfg_tmp.taper 				= 'hanning';
 	mix_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
-	mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	if rem
+		mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+	end
+
 	clear tmp_nrem tmp_rem
 
 	% Calculate the oscillatory component by subtracting the fractal from the
@@ -439,22 +463,28 @@ if cfg.spectrum
 	cfg_tmp.parameter			= 'powspctrm';
 	cfg_tmp.operation			= 'subtract';
 	osc_nrem					= ft_math(cfg_tmp, mix_nrem, fra_nrem);
-	osc_rem						= ft_math(cfg_tmp, mix_rem, fra_rem);
+	if rem
+		osc_rem						= ft_math(cfg_tmp, mix_rem, fra_rem);
+	end
 	
 	% Use percent change for even more obvious peaks
 	cfg_tmp.operation			= 'divide';
 	rel_nrem					= ft_math(cfg_tmp, osc_nrem, fra_nrem);
-	rel_rem						= ft_math(cfg_tmp, osc_rem, fra_rem);
+	if rem
+		rel_rem						= ft_math(cfg_tmp, osc_rem, fra_rem);
+	end
 	
 	output.spectrum.fra_nrem	= fra_nrem.powspctrm;
-	output.spectrum.fra_rem		= fra_rem.powspctrm;
 	output.spectrum.mix_nrem	= mix_nrem.powspctrm;
-	output.spectrum.mix_rem		= mix_rem.powspctrm;
 	output.spectrum.osc_nrem	= osc_nrem.powspctrm;
-	output.spectrum.osc_rem		= osc_rem.powspctrm;
 	output.spectrum.rel_nrem	= rel_nrem.powspctrm;
-	output.spectrum.rel_rem		= rel_rem.powspctrm;
 	output.spectrum.freq		= fra_nrem.freq; % add frequency vector
+	if rem
+		output.spectrum.fra_rem		= fra_rem.powspctrm;
+		output.spectrum.mix_rem		= mix_rem.powspctrm;
+		output.spectrum.osc_rem		= osc_rem.powspctrm;
+		output.spectrum.rel_rem		= rel_rem.powspctrm;
+	end
 	
 	if cfg.debugging
 		figure
@@ -500,6 +530,22 @@ if cfg.spi
 	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
+	% Determine threshold(s)
+	thr = zeros(3,numel(chans));
+	if isempty(cfg.spi_thr_chan)
+		% Determine channel-specific thresholds
+		for iCh = 1:numel(chans)
+			thr(1, iCh) = cfg.spi_thr(1,1)*spi_amp_std(iCh);
+			thr(2, iCh) = cfg.spi_thr(2,1)*spi_amp_std(iCh);
+			thr(3, iCh) = cfg.spi_thr(3,1)*spi_amp_std(iCh);
+		end
+	else
+		% One threshold for all channels, determined based on mean of provided channels
+		thr(1, :) = deal(mean(cfg.spi_thr(1,1)*spi_amp_std(contains(chans, cfg.spi_thr_chan))));
+		thr(2, :) = deal(mean(cfg.spi_thr(2,1)*spi_amp_std(contains(chans, cfg.spi_thr_chan))));
+		thr(3, :) = deal(mean(cfg.spi_thr(3,1)*spi_amp_std(contains(chans, cfg.spi_thr_chan))));
+	end
+
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
 	for iEpoch = 1:size(NREMEpisodes,2)
@@ -508,7 +554,8 @@ if cfg.spi
 			% First threshold criterion
 			% Where does the smoothed envelope cross the threshold?
 			FastSpiAmplitudeTmp = smooth(spi_amp_tmp(iCh, :),0.1 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
-			above_threshold = FastSpiAmplitudeTmp > cfg.spi_thr(1,1)*spi_amp_std(iCh); % long column showing threshold crossings
+			above_threshold = FastSpiAmplitudeTmp > thr(1, iCh); % long column showing threshold crossings
+
 			isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(1)*Fs, cfg.spi_dur_max(1)*Fs]); % find spindle within duration range
 			isLongEnough = [0; isLongEnough]; %compensate that spindle might start in the beginning
 			SpiBeginning =  strfind(isLongEnough',[0 1]); %find spindle Beginning line before compensates that it find last 0
@@ -521,16 +568,17 @@ if cfg.spi
 				plot(win/Fs, spi_raw(1,win)), hold on			% raw signal
 				plot(win/Fs, spi_amp_tmp(iCh,win), 'r')			% envelope
 				plot(win/Fs, FastSpiAmplitudeTmp(win), 'r')		% smoothed envelope
-				line([win(1)/Fs win(end)/Fs],[cfg.spi_thr(1,1)*spi_amp_std(iCh) cfg.spi_thr(1,1)*spi_amp_std(iCh)]) % threshold
+				line([win(1)/Fs win(end)/Fs],[thr(1, iCh) thr(1, iCh)]) % threshold
 				plot(win/Fs, above_threshold(win))				% threshold crossed
 				plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
 			end
-			% Delete spindle if it is cut by beginning / end of epoch
+
+      % Delete spindle if it is cut by end or beginning of epoch
 			if ~isempty(SpiBeginning) || ~isempty(SpiEnd)
-				if length(SpiEnd)<length(SpiBeginning)
+				if length(SpiEnd)<length(SpiBeginning) % if at the end
 					SpiBeginning(:,end)=[];
 				end
-				if ~isempty(SpiBeginning) || ~isempty(SpiEnd) && SpiBeginning(1,1)==1
+				if SpiBeginning(1,1)==1 % ...or the beginning
 					SpiBeginning(:,1) = [];
 					SpiEnd(:,1) = [];
 				end
@@ -549,13 +597,14 @@ if cfg.spi
 					FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
 					
 					% Second threshold criterion
-					above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(2,1)*spi_amp_std(iCh);
+					above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(2, iCh);
 					isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(2)*Fs, cfg.spi_dur_max(2)*Fs]); %find spindle within duration range
 					
 					% Third threshold criterion
-					above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > cfg.spi_thr(3,1)*spi_amp_std(iCh);
+					above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(3, iCh);
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.spi_dur_max(1)*Fs]); %find spindle within duration range
-					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', cfg.spi_thr(1,1)*spi_amp_std(iCh));
+					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', thr(1, iCh));
+
 					if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<0.125 * Fs %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
 						% do nothing
 					else %if criteria not fullfilled store index of Spindles and kill it later
@@ -589,13 +638,14 @@ if cfg.spi
 	end
 	output.spi.events_perNREMep	= spi';
 	output.spi.amp_std			= spi_amp_std;
-    output.spi.amp_mean			= spi_amp_mean;
-    
-    if isfield(cfg,'rip')%keep spindle filtered data for spindle rippel coupling 
+	output.spi.amp_mean			= spi_amp_mean;
+	output.spi.thr				= thr;
+	if isfield(cfg,'rip')%keep spindle filtered data for spindle rippel coupling 
         clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi
     else
         clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
-    end
+	end
+
 end
 
 %% SOs
@@ -622,9 +672,11 @@ if cfg.slo
 			slo_tmp			= slo_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs)';
 			SOBegEpisode	= strfind((slo_tmp<-SoThreshold)',[0 1])-1;
 			SOEndEpisode	= strfind((slo_tmp<-SoThreshold)',[1 0]);
-			
+			if slo_tmp(1) < -SoThreshold % if NREMepisode starts under the threshold, throw away that find (might be redundant to an exclusion done earlier
+				SOEndEpisode(1) = [];
+			end
 			% Double-check found events
-			if size(SOEndEpisode,1)>0
+			if ~isempty(SOEndEpisode)
 				if SOEndEpisode(1,1) < SOBegEpisode(1,1)
 					SOEndEpisode(:,1) = [];
 				end
@@ -913,7 +965,9 @@ end
 
 %% Theta
 % Calculates theta amplitude during REM
-if cfg.the
+if cfg.the && ~rem
+	warning('Theta amplitude requested but no REM in data. Skipping...')
+elseif cfg.the
 	disp('Starting computation of theta amplitude...')
 	
 	cfg_pp				= [];

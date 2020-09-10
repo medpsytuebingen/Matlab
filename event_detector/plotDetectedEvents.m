@@ -16,6 +16,8 @@ function plotDetectedEvents(output, path_plot)
 % OUTPUT VARIABLES:
 % -
 %
+% TO DO: 
+%
 % AUTHOR:
 % Jens Klinzing, klinzing@princeton.edu
 
@@ -69,46 +71,37 @@ epochLength                 = output.info.scoring_epoch_length;
 % Translate hypnogram to seconds
 % TODO: Why are we doing this? Legacy reason?
 hypnogram_plot = [];
-hypnogram_plot.Wake = [];
 for iStNREM = 1:length(output.info.cfg.code_NREM) %create based on number of NREM stages
-    hypnogram_plot.(strcat('S',num2str(iStNREM))) = [];
+	hypnogram_plot.(strcat('S',num2str(output.info.cfg.code_NREM(iStNREM)))) = [];
 end
 hypnogram_plot.REM = [];
+hypnogram_plot.Wake = [];
 
+% NREM
 for iSt = 1:length(hypnogram)
-    sec = (iSt-1)*epochLength+1;    % translate the current position into seconds
-    if hypnogram(iSt) == output.info.cfg.code_WAKE(1)
-        for iEp = sec:sec+epochLength-1
-            hypnogram_plot.Wake(end+1)      = iEp;
-        end
-    end
-    if hypnogram(iSt) == output.info.cfg.code_NREM(1)
-        for iEp = sec:sec+epochLength-1
-            hypnogram_plot.S1(end+1)    = iEp;
-        end
-    end
-    if length(output.info.cfg.code_NREM)>=2
-        if hypnogram(iSt) == output.info.cfg.code_NREM(2)
-            for iEp = sec:sec+epochLength-1
-                hypnogram_plot.S2(end+1)    = iEp;
-            end
-        end
-        if hypnogram(iSt) == output.info.cfg.code_NREM(3)
-            for iEp = sec:sec+epochLength-1
-                hypnogram_plot.S3(end+1)    = iEp;
-            end
-        end
-        if hypnogram(iSt) == output.info.cfg.code_NREM(4)
-            for iEp = sec:sec+epochLength-1
-                hypnogram_plot.S4(end+1)    = iEp;
-            end
-        end
-    end
-    if hypnogram(iSt) == output.info.cfg.code_REM(1)
-        for iEp = sec:sec+epochLength-1
-            hypnogram_plot.REM(end+1)   = iEp;
-        end
-    end
+	sec = (iSt-1)*epochLength+1;    % translate the current position into seconds
+	for iEntry = 1:numel(output.info.cfg.code_NREM)
+		if hypnogram(iSt) == output.info.cfg.code_NREM(iEntry)
+			for iEp = sec:sec+epochLength-1
+				tmpstr = strcat('S', num2str(output.info.cfg.code_NREM(iEntry)));
+				hypnogram_plot.(tmpstr)(end+1)    = iEp;
+			end
+		end
+	end
+	
+	% REM
+	if hypnogram(iSt) == output.info.cfg.code_REM(1)
+		for iEp = sec:sec+epochLength-1
+			hypnogram_plot.REM(end+1)   = iEp;
+		end
+	end
+	
+	% WAKE
+	if hypnogram(iSt) == output.info.cfg.code_WAKE(1)
+		for iEp = sec:sec+epochLength-1
+			hypnogram_plot.Wake(end+1)      = iEp;
+		end
+	end
 end
 
 % Delete all empty fields/sleep stages from array
@@ -146,7 +139,7 @@ set(h, 'Position', get(0, 'Screensize')); % fullscreen
 % Left: Scoring and event distribution
 subplot(num_chans*num_pnl,num_col,splts_l)
 if isfield(output.info, 'name') && ~isempty(output.info.name)
-    title(['Dataset: ' output.info.name ', recording length: ' num2str(output.info.length / output.info.Fs/60) ' min'])
+	title(['Data: ' output.info.name ', recording length: ' num2str(output.info.length / output.info.Fs/60) ' min'], 'Interpreter', 'none')
 else
     title(['Recording length: ' num2str(output.info.length / output.info.Fs/60) ' min'])
 end
@@ -315,36 +308,35 @@ drawnow
 
 %% PLOT SPECTRUM PANEL
 if spectrum
-    pnl			= 2; % first panel
-    splts		= (pnl-1)*(num_chans*num_col)+1:num_chans*num_col*pnl; % this subplot business is getting confusing, are there better ways to flexibly manage subplots?
-    splts_l = splts(logical(mod(ceil((1:length(splts)) / (num_col/2)), 2)));
-    splts_r = splts(~logical(mod(ceil((1:length(splts)) / (num_col/2)), 2)));
-    
-    % Left: NREM
-    if isfield(output.spectrum, 'rel_nrem')
-        s1 = subplot(num_chans*num_pnl,num_col,splts_l);
-        plot(output.spectrum.freq, output.spectrum.rel_nrem, '-', 'LineWidth', 2)
-        ylim([-1 max(max(output.spectrum.rel_nrem(:, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
-        ylabel('Oscillatory relative to fractal component')
-        title(sprintf('\n Spectrum NREM sleep'))
-        legend(output.info.channel{:})
-        xlim([1 35]) % thats where the really interesting stuff happens
-    end
-    
-    % Right: REM
-    if isfield(output.spectrum, 'rel_rem')
-        s2 = subplot(num_chans*pnl,num_col,splts_r);
-        plot(output.spectrum.freq, output.spectrum.rel_rem, '-', 'LineWidth', 2)
-        ylim([-1 max(max(output.spectrum.rel_rem(:, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
-        ylabel('Oscillatory relative to fractal component')
-        legend(output.info.channel{:})
-        title(sprintf('\n Spectrum REM sleep'))
-    end
+	pnl			= 2; % first panel
+	splts		= (pnl-1)*(num_chans*num_col)+1:num_chans*num_col*pnl; % this subplot business is getting confusing, are there better ways to flexibly manage subplots?	
+	splts_l = splts(logical(mod(ceil((1:length(splts)) / (num_col/2)), 2)));
+	splts_r = splts(~logical(mod(ceil((1:length(splts)) / (num_col/2)), 2)));
+	
+	% Left: NREM
+	if isfield(output.spectrum, 'rel_nrem')
+		s1 = subplot(num_chans*num_pnl,num_col,splts_l);
+		plot(output.spectrum.freq, output.spectrum.rel_nrem, '-', 'LineWidth', 2)
+		ylim([-1 max(max(output.spectrum.rel_nrem(:, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
+		ylabel('Oscillatory relative to fractal component')
+		title(sprintf('\n Spectrum NREM sleep'))
+		legend(output.info.channel{:})
+		xlim([1 35]) % thats where the really interesting stuff happens
+		s1.Position = [s1.Position(1) s1.Position(2)-.04 s1.Position(3) s1.Position(4)]; % shift subplot a bit down to prevent overlaps
+	end
+	
+	% Right: REM
+	if isfield(output.spectrum, 'rel_rem')
+		s2 = subplot(num_chans*pnl,num_col,splts_r);
+		plot(output.spectrum.freq, output.spectrum.rel_rem, '-', 'LineWidth', 2)
+		ylim([-1 max(max(output.spectrum.rel_rem(:, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
+		ylabel('Oscillatory relative to fractal component')
+		legend(output.info.channel{:})
+		xlim([1 35]) % thats where the really interesting stuff happens
+		title(sprintf('\n Spectrum REM sleep'))
+		s2.Position = [s2.Position(1) s2.Position(2)-.04 s1.Position(3) s2.Position(4)];  % shift subplot a bit down to prevent overlaps
+	end
 end
-
-% Shift both subplots a but down to make everything look better
-s1.Position = [s1.Position(1) s1.Position(2)-.04 s1.Position(3) s1.Position(4)];
-s2.Position = [s2.Position(1) s2.Position(2)-.04 s1.Position(3) s2.Position(4)];
 
 %% Save the plot
 if nargin > 1 && ~isempty(path_plot)
