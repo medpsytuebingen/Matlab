@@ -784,6 +784,7 @@ if cfg.rip
 	rip = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected ripples
 	for iEpoch = 1:size(NREMEpisodes,2)
 		rip_amp_tmp = rip_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+        CurrentControlRipples = [];
 		for iCh = 1:numel(chans)
 			% First threshold criterion for min duration
 			% Where does the smoothed envelope cross the threshold?
@@ -833,24 +834,28 @@ if cfg.rip
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.rip_dur_max(1)*Fs]); %find ripple within duration range
 					if sum(double(MaxIsThere))>=1 %check if Max Amplitude is high enough 
 						% do nothing
-					else %if criteria not fullfilled store index of ripple and kill it later
-						TempIdx = [TempIdx irip];
-                    end
-                    if isfield(cfg,'rip_control_Chan') && strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)%check for detected common noise in control channel
-                        CurrentControlRipples = rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)};
-                        rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)} = [];
-                    end
-                    if any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
-                            any(ismember(CurrentControlRipples(2,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))  %check if control ripple Ending is inside detected ripple
+                    else %if criteria not fullfilled store index of ripple and kill it later
                         TempIdx = [TempIdx irip];
                     end
+                    if isfield(cfg,'rip_control_Chan')
+                        if strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)%check for detected common noise in control channel
+                            CurrentControlRipples = [CurrentControlRipples rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)}];
+                            rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)} = [];
+                            
+                        elseif any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
+                                any(ismember(CurrentControlRipples(2,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))  %check if control ripple Ending is inside detected ripple
+                            TempIdx = [TempIdx irip];
+                        end
+                    end
                     
-				else %if ripple to close to recording end
+                else %if ripple to close to recording end
 					TempIdx = [TempIdx irip];
 				end
 			end
-			
-			rip{iEpoch,iCh}(:,TempIdx)=[];%if criteria is not fullfilled delete detected ripple
+            if strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)
+            else
+                rip{iEpoch,iCh}(:,TempIdx)=[];%if criteria is not fullfilled delete detected ripple
+            end
 		end
 	end
 	
