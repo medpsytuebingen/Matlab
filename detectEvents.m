@@ -589,8 +589,13 @@ if cfg.spi
 	end
 	output.spi.events_perNREMep	= spi';
 	output.spi.amp_std			= spi_amp_std;
-	output.spi.amp_mean			= spi_amp_mean;
-	clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
+    output.spi.amp_mean			= spi_amp_mean;
+    
+    if isfield(cfg,'rip')%keep spindle filtered data for spindle rippel coupling 
+        clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi
+    else
+        clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
+    end
 end
 
 %% SOs
@@ -694,16 +699,15 @@ if cfg.slo
         twindow						= 2.5; % data will be +/- twindow
         SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),round(twindow*2*Fs + 1));
         for iSO = 1:size(NegativePeaks{iCh,1},1)
-            if NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs) < length(slo_raw)%delete Event that is to close to recording end
-                NegativePeaks{iCh,1}(iSO,:) = [];
-                ZeroCrossings{iCh,1}(:,iSO) = [];
-                Peak2PeakAmp{iCh,1}(iSO,:)  = [];
-                SOGA{iCh,1}(iSO,:)          = [];
-            else
-                SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
-            end
+            SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
         end
-		
+		TmpIndex = find(NegativePeaks{iCh,1}(:,1)+round(twindow*Fs) > length(slo_raw));%delete Event that is to close to recording end
+              
+        NegativePeaks{iCh,1}(TmpIndex,:) = [];
+        ZeroCrossings{iCh,1}(:,TmpIndex) = [];
+        Peak2PeakAmp{iCh,1}(TmpIndex,:)  = [];
+        SOGA{iCh,1}(TmpIndex,:)          = [];
+        
 		% SO-spindle coupling
 		if cfg.spi && size(output.spi.events{iCh},2) > 0 % if there are spindles in this channel
 			% Method 1: Extract SO phase at point of peak amplitude in spindle
@@ -861,9 +865,34 @@ if cfg.rip
 	end
 	output.rip.events_perNREMep	= rip';
 	output.rip.amp_std			= rip_amp_std;
-	output.rip.amp_mean			= rip_amp_mean;
-	
-	clear rip_amp_tmp TotalNumberOfrip EpisodeDurations rip data_rip
+    output.rip.amp_mean			= rip_amp_mean;
+    
+    %spindle ripple coupling based on detected events
+    if cfg.spi
+		SpiRipDetCoupling{iCh,1}	= [];
+        cnt							= 1;
+        SpiPhase = rad2deg(angle(hilbert(data_spi.trial{1}(iCh,:)'))); % Spi phase along entire data length
+        for iSpi = 1:size(output.spi.events{iCh,1},2)
+            Rip_cur = [];
+            % If there is a Ripndle fully inside Spi plus minus time
+            % window
+            Rip_ind = find(output.rip.events{iCh}(1,:) > output.spi.events{iCh,1}(1,iSpi)  & output.rip.events{iCh}(2,:) < output.spi.events{iCh,1}(2,iSpi));
+            if size(Rip_ind,2) > 0 % if at least one Ripndle was found
+                Rip_cur = output.rip.events{iCh}(:,Rip_ind);
+            end
+            for iRip = 1:size(Rip_cur,2)
+                CurrSpiPhase = SpiPhase(output.spi.events{iCh,1}(1,iSpi):output.spi.events{iCh,1}(2,iSpi)); % Spi phase along entire window
+                [~, RipAmpIndex] = max(rip_amp(iCh, Rip_cur(1,iRip):Rip_cur(2,iRip))); % find Ripndle maximum amp (samples from Ripndle start)
+                tmp = Rip_cur(1,iRip) + RipAmpIndex - 1; % Ripndle maximum amp in global samples
+                tmp = tmp - output.spi.events{iCh,1}(1,iSpi); % Ripple maximum amp in samples from Spi window start
+                SpiRipDetCoupling{iCh,1}(cnt,1) = CurrSpiPhase(round(tmp)); % note down phase there
+                cnt = cnt + 1;
+            end
+        end  
+        output.SpiRipDetCoupling		= SpiRipDetCoupling; % store in output	
+    end
+    
+    clear rip_amp_tmp TotalNumberOfrip EpisodeDurations rip data_rip
 end
 
 %% Theta
