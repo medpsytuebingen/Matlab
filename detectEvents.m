@@ -153,7 +153,7 @@ end
 if ~isfield(cfg, 'spectrum') % 
 	cfg.spectrum				= 0; 
 end
-if isfield(cfg, 'spi_indiv') && cfg.spi_indiv
+if isfield(cfg, 'spi_indiv') && cfg.spi_indiv && ~cfg.spectrum
 	disp('If individual spindle peaks are requested, the spectrum is always calculated.')
 	cfg.spectrum				= 1; 
 end
@@ -661,9 +661,11 @@ if cfg.slo
 			slo_tmp			= slo_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs)';
 			SOBegEpisode	= strfind((slo_tmp<-SoThreshold)',[0 1])-1;
 			SOEndEpisode	= strfind((slo_tmp<-SoThreshold)',[1 0]);
-			
+			if slo_tmp(1) < -SoThreshold % if NREMepisode starts under the threshold, throw away that find
+				SOEndEpisode(1) = [];
+			end
 			% Double-check found events
-			if size(SOEndEpisode,1)>0
+			if ~isempty(SOEndEpisode)
 				if SOEndEpisode(1,1) < SOBegEpisode(1,1)
 					SOEndEpisode(:,1) = [];
 				end
