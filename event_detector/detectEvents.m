@@ -116,6 +116,7 @@ function output = detectEvents(cfg, data)
 % . NN: SO-check should delete SOs completely (see todo comment)
 % . artifact handling! currently, events are detected based on NREM episodes, which are unaffected by artifacts. only std/amp calculations exclude artifact since they are based on scoring_fine, in which artifacts are marked (99).
 %   one solution possible: add after each event detection another check for any overlaps with artifacts
+% . iEpoch should always be iEp (its episodes)
 %
 % AUTHORS:
 % Jens Klinzing, klinzing@princeton.edu
@@ -142,6 +143,9 @@ Fs = data.fsample;
 % Set default values - general
 if ~isfield(cfg, 'debugging') % undocumented debugging option
 	cfg.debugging				= 0; % in s
+end
+if ~isfield(cfg, 'verbose') % undocumented debugging option
+	cfg.verbose					= 0; % in s
 end
 if isfield(cfg, 'artfctdef') && ~isfield(cfg, 'artfctpad')
 	cfg.artfctpad = 0.5;
@@ -437,6 +441,8 @@ if cfg.spectrum
 		tmp_rem						= ft_redefinetrial(cfg_tmp, tmp_rem);
 	end
 	
+	ft_warning off % makes the output unreadable otherwise (will be turned on again below)
+	
 	% Calculate spectra
 	cfg_tmp						= [];
 	cfg_tmp.foi					= spec_freq(1):0.05:spec_freq(2);
@@ -444,17 +450,18 @@ if cfg.spectrum
 	cfg_tmp.pad					= 'nextpow2';
 	fra_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
 	if rem
-		fra_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+		fra_rem					= ft_freqanalysis(cfg_tmp, tmp_rem);
 	end
 	
 	cfg_tmp.method 				= 'mtmfft';
 	cfg_tmp.taper 				= 'hanning';
 	mix_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
 	if rem
-		mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+		mix_rem					= ft_freqanalysis(cfg_tmp, tmp_rem);
 	end
 	clear tmp_nrem tmp_rem
-
+	ft_warning on
+	
 	% Calculate the oscillatory component by subtracting the fractal from the
 	% mixed component
 	cfg_tmp						= [];
@@ -547,6 +554,7 @@ if cfg.spi
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
 	for iEpoch = 1:size(NREMEpisodes,2)
+		if cfg.verbose, disp([' ********* Detectiong spindles in NREM episode: ' num2str(iEpoch) ' / ' num2str(size(NREMEpisodes,2))]), end
 		spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
 		for iCh = 1:numel(chans)
 			% First threshold criterion
@@ -586,6 +594,7 @@ if cfg.spi
 			
 			CurrentSpindles = spi{iEpoch,iCh};
 			TempIdx = []; % these spindle candidates will be eliminated
+			if cfg.verbose, disp([' ********* Working on channel: ' num2str(iCh) ' (line 5933)']), end
 			for iSpi = 1: size (CurrentSpindles,2)
 				window_size = 5 * Fs; % in sec
 				if CurrentSpindles(2,iSpi)+window_size < length(data_spi.trial{1}(iCh,:)) %delete Spi to close to recording end
