@@ -301,7 +301,7 @@ if slo
 				pol.Parent.RAxis.Visible = 'off';
                 pol.FaceColor ='g';
 				if iCh == 1
-					title(sprintf(['Spi Phase detected ripple peak\n n=' num2str(numel(output.SloSpiDetCoupling{iCh}))]),  'FontSize', 6, 'Color', 'red')
+					title(sprintf(['Spi Phase detected ripple peak\n n=' num2str(numel(output.SloSpiDetCoupling{iCh}))]),  'FontSize', 6, 'Color', 'green')
 				else
 					title(['n=' num2str(numel(output.SpiRipDetCoupling{iCh}))],  'FontSize', 6, 'Color', 'green')
 				end
