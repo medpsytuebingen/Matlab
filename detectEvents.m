@@ -829,14 +829,16 @@ if cfg.rip
 						% do nothing
 					else %if criteria not fullfilled store index of ripple and kill it later
 						TempIdx = [TempIdx irip];
-					end
-					if isfield(cfg,'rip_control_Chan') && strcmp(data_rip.label{iCh},cfg.rip_control_Chan)%check for detected common noise in control channel
-						CurrentControlRipples = rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan)};
-						if any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
-								any(ismember(CurrentControlRipples(2,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))  %check if control ripple Ending is inside detected ripple
-							TempIdx = [TempIdx irip];
-						end
-					end
+                    end
+                    if isfield(cfg,'rip_control_Chan') && strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)%check for detected common noise in control channel
+                        CurrentControlRipples = rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)};
+                        rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)} = [];
+                    end
+                    if any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
+                            any(ismember(CurrentControlRipples(2,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))  %check if control ripple Ending is inside detected ripple
+                        TempIdx = [TempIdx irip];
+                    end
+                    
 				else %if ripple to close to recording end
 					TempIdx = [TempIdx irip];
 				end
