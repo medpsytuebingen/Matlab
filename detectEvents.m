@@ -569,12 +569,12 @@ if cfg.spi
 				plot(win/Fs, above_threshold(win))				% threshold crossed
 				plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
 			end
-			% Delete spindle if it is cut by beginning / end of epoch
+			% Delete spindle if it is cut by end or beginning of epoch
 			if ~isempty(SpiBeginning) || ~isempty(SpiEnd)
 				if length(SpiEnd)<length(SpiBeginning)
 					SpiBeginning(:,end)=[];
 				end
-				if ~isempty(SpiBeginning) || ~isempty(SpiEnd) && SpiBeginning(1,1)==1
+				if SpiBeginning(1,1)==1
 					SpiBeginning(:,1) = [];
 					SpiEnd(:,1) = [];
 				end
