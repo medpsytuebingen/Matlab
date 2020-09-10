@@ -841,10 +841,12 @@ if cfg.rip
                         if strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)%check for detected common noise in control channel
                             CurrentControlRipples = [CurrentControlRipples rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)}];
                             rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)} = [];
-                            
-                        elseif any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
-                                any(ismember(CurrentControlRipples(2,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))  %check if control ripple Ending is inside detected ripple
-                            TempIdx = [TempIdx irip];
+                        end
+                        if ~isempty(CurrentControlRipples)
+                            if any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
+                                    any(ismember(CurrentControlRipples(2,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))  %check if control ripple Ending is inside detected ripple
+                                TempIdx = [TempIdx irip];
+                            end
                         end
                     end
                     
