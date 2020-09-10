@@ -643,24 +643,30 @@ if cfg.slo
 	for iCh = 1:numel(chans)
 		SOEpisodes{iCh,1} = round(SOEpisodes{iCh,1});%compensate if Fs is not integer
 		ZeroCrossings{iCh,1} = zeros(3,size(SOEpisodes{iCh,1},2));
-		for iEvent = 1:size(SOEpisodes{iCh,1},2)
-			X = 0;  % marker for left zero crossing found
-			Y = 0;  % marker for right zero crossing found (1) + right plus-to-minus crossing after the upstate (2)
-			for iSearchCrossing = 1:2*Fs
-				if X == 0 && slo_raw(iCh, SOEpisodes{iCh,1}(1,iEvent)-iSearchCrossing)>0
-					ZeroCrossings{iCh,1} (1,iEvent) = SOEpisodes{iCh,1}(1,iEvent)-iSearchCrossing;
-					X = 1;
-				end
-				if Y == 0 && slo_raw(iCh, SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing)>0
-					ZeroCrossings{iCh,1} (2,iEvent) = SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing;
-					Y = 1;
-				end
-				if Y ==1 && slo_raw(iCh, SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing)<0
-					ZeroCrossings{iCh,1}(3,iEvent) = SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing;
-					Y = 2;
-				end
-			end
-		end
+        TmpIndex = [];
+        for iEvent = 1:size(SOEpisodes{iCh,1},2)
+            X = 0;  % marker for left zero crossing found
+            Y = 0;  % marker for right zero crossing found (1) + right plus-to-minus crossing after the upstate (2)
+            if SOEpisodes{iCh,1}(2,iEvent)+2*Fs < length(slo_raw) %nly if enough space until rec end
+                for iSearchCrossing = 1:2*Fs
+                    if X == 0 && slo_raw(iCh, SOEpisodes{iCh,1}(1,iEvent)-iSearchCrossing)>0
+                        ZeroCrossings{iCh,1} (1,iEvent) = SOEpisodes{iCh,1}(1,iEvent)-iSearchCrossing;
+                        X = 1;
+                    end
+                    if Y == 0 && slo_raw(iCh, SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing)>0
+                        ZeroCrossings{iCh,1} (2,iEvent) = SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing;
+                        Y = 1;
+                    end
+                    if Y ==1 && slo_raw(iCh, SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing)<0
+                        ZeroCrossings{iCh,1}(3,iEvent) = SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing;
+                        Y = 2;
+                    end
+                end
+            else
+                TmpIndex = [TmpIndex iEvent];
+            end
+        end
+        SOEpisodes{iCh,1}(:,TmpIndex) = []; %delete SOEpisodes to close to rec end
 		
 		% Delete those events where not all crossings could have been found
 		ZeroCrossings{iCh,1}(:,find(ZeroCrossings{iCh,1}(1,:)==0))=[];
