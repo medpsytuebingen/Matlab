@@ -42,7 +42,9 @@ if isfield(output, 'rip')
 	det_rip					= output.rip.events;
 	% Find center of each ripple
 	for iCh = 1:numel(det_rip)
-		det_rip{iCh} = det_rip{iCh}(1,:) + (det_rip{iCh}(2,:) - det_rip{iCh}(1,:))/2;
+        if ~isempty(det_rip{iCh})
+            det_rip{iCh} = det_rip{iCh}(1,:) + (det_rip{iCh}(2,:) - det_rip{iCh}(1,:))/2;
+        end
 	end
 else
 	rip						= 0;
@@ -188,11 +190,13 @@ if spi
 end
 if rip
 	for iCh = 1:num_chans
-		temphandle      = plot(det_rip{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.04, 'go'); hold on
-		if iCh == 1
-			handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
-		end
-		clear temphandle
+        if ~isempty(det_rip{iCh})
+            temphandle      = plot(det_rip{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.04, 'go'); hold on
+            if iCh == 1
+                handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
+            end
+            clear temphandle
+        end
 	end
 end
 % Labels, title, legend
