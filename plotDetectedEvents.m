@@ -288,6 +288,19 @@ if slo
 				else
 					title(['n=' num2str(numel(output.SloSpiDetCoupling{iCh}))],  'FontSize', 6, 'Color', 'red')
 				end
+            end
+            %plot spindle ripple coupling
+            if isfield(output, 'SpiRipDetCoupling')
+				axes('pos',[p.Position(1)+p.Position(3)*.8 p.Position(2)+p.Position(4)*.71 p.Position(3)*.2 p.Position(3)*.2]) % left (first argument) had +p.Position(3)*.7
+				pol = polarhistogram(deg2rad(output.SpiRipDetCoupling{iCh}));
+				pol.Parent.ThetaAxis.Visible = 'off';
+				pol.Parent.RAxis.Visible = 'off';
+                pol.FaceColor ='g';
+				if iCh == 1
+					title(sprintf(['Spi Phase detected ripple peak\n n=' num2str(numel(output.SloSpiDetCoupling{iCh}))]),  'FontSize', 6, 'Color', 'red')
+				else
+					title(['n=' num2str(numel(output.SpiRipDetCoupling{iCh}))],  'FontSize', 6, 'Color', 'green')
+				end
 			end
 		end
 		
