@@ -555,10 +555,15 @@ if cfg.spi
 
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
-	for iEpoch = 1:size(NREMEpisodes,2)
-		if cfg.verbose, disp([' ********* Detectiong spindles in NREM episode: ' num2str(iEpoch) ' / ' num2str(size(NREMEpisodes,2))]), end
+	for iEpoch = 1 %:size(NREMEpisodes,2)
+		if cfg.verbose, disp(['********* Detectiong spindles in NREM episode: ' num2str(iEpoch) ' / ' num2str(size(NREMEpisodes,2))]), end
 		spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
 		for iCh = 1:numel(chans)
+			if cfg.verbose
+				disp(['****** Working on channel: ' num2str(iCh)])
+				tic
+			end
+			
 			% First threshold criterion
 			% Where does the smoothed envelope cross the threshold?
 			FastSpiAmplitudeTmp = smooth(spi_amp_tmp(iCh, :),0.1 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
@@ -581,12 +586,12 @@ if cfg.spi
 				plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
 			end
 
-      % Delete spindle if it is cut by end or beginning of epoch
-			if ~isempty(SpiBeginning) || ~isempty(SpiEnd)
+			% Delete spindle if it is cut by end or beginning of epoch
+			if ~isempty(SpiBeginning) && ~isempty(SpiEnd)
 				if length(SpiEnd)<length(SpiBeginning) % if at the end
 					SpiBeginning(:,end)=[];
 				end
-				if SpiBeginning(1,1)==1 % ...or the beginning
+				if ~isempty(SpiBeginning) && SpiBeginning(1,1)==1 % ...or the beginning
 					SpiBeginning(:,1) = [];
 					SpiEnd(:,1) = [];
 				end
@@ -598,13 +603,16 @@ if cfg.spi
 			
 			CurrentSpindles = spi{iEpoch,iCh};
 			TempIdx = []; % these spindle candidates will be eliminated
-			if cfg.verbose, disp([' ********* Working on channel: ' num2str(iCh) ' (line 5933)']), end
-			for iSpi = 1: size (CurrentSpindles,2)
+			for iSpi = 1:size(CurrentSpindles,2)
+				if cfg.verbose
+					disp(['Spindel ' num2str(iSpi)])
+					toc
+				end
 				window_size = 5 * Fs; % in sec
-				if CurrentSpindles(2,iSpi)+window_size < length(data_spi.trial{1}(iCh,:)) %delete Spi to close to recording end
+				if CurrentSpindles(2,iSpi)+window_size < data_spi.sampleinfo(2) %delete Spi to close to recording end
 					DataTmpSpi = data_spi.trial{1}(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filteres spindle signal for eachspindle + - 5sec
 					FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
-					
+		
 					% Second threshold criterion
 					above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(2, iCh);
 					isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(2)*Fs, cfg.spi_dur_max(2)*Fs]); %find spindle within duration range
@@ -886,7 +894,7 @@ if cfg.rip
 			TempIdx = [];
 			for irip = 1: size (CurrentRipples,2)
 				window_size = 0.5 * Fs; % in sec
-				if  CurrentRipples(2,irip)+window_size < length(data_rip.trial{1}(iCh,:)) %check for distance to recording end
+				if  CurrentRipples(2,irip)+window_size < data_rip.sampleinfo(2) %check for distance to recording end
 					DataTmprip = data_rip.trial{1}(iCh, CurrentRipples(1,irip)-window_size : CurrentRipples(2,irip)+window_size); %get filteres ripple signal for eachripple + - 5sec
 					RipAmplitudeTmp = smooth(abs(hilbert(DataTmprip')),0.004*Fs);%get smoothed instantaneous amplitude
 					
