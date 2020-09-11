@@ -555,13 +555,13 @@ if cfg.spi
 
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
-	for iEpoch = 1 %:size(NREMEpisodes,2)
+	for iEpoch = 1:size(NREMEpisodes,2)
 		if cfg.verbose, disp(['********* Detectiong spindles in NREM episode: ' num2str(iEpoch) ' / ' num2str(size(NREMEpisodes,2))]), end
 		spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
 		for iCh = 1:numel(chans)
 			if cfg.verbose
 				disp(['****** Working on channel: ' num2str(iCh)])
-				tic
+% 				tic
 			end
 			
 			% First threshold criterion
@@ -610,7 +610,7 @@ if cfg.spi
 				end
 				window_size = 5 * Fs; % in sec
 				if CurrentSpindles(2,iSpi)+window_size < data_spi.sampleinfo(2) %delete Spi to close to recording end
-					DataTmpSpi = data_spi.trial{1}(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filteres spindle signal for eachspindle + - 5sec
+					DataTmpSpi = data_spi.trial{1}(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filtered spindle signal for each spindle + - 5sec
 					FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
 		
 					% Second threshold criterion
@@ -631,7 +631,7 @@ if cfg.spi
 					TempIdx = [TempIdx iSpi];
 				end
 			end
-			spi{iEpoch,iCh}(:,TempIdx)=[];%if not criteriy fullfilled delete detected spindle
+			spi{iEpoch,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
 		end
 	end
 	
