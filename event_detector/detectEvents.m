@@ -591,8 +591,7 @@ if cfg.spi
 				if length(SpiEnd)<length(SpiBeginning) % if at the end
 					SpiBeginning(:,end)=[];
 				end
-				if ~isempty(SpiBeginning) && SpiBeginning(1,1)==1 % ...or the beginning
-					SpiBeginning(:,1) = [];
+				if SpiEnd(1) > SpiBeginning(1)% ...or the beginning
 					SpiEnd(:,1) = [];
 				end
 				FastSpindles = [SpiBeginning;SpiEnd];
