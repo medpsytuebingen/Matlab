@@ -169,7 +169,7 @@ handlevector = [temphandle handlevector];
 if slo
     for iCh = 1:num_chans
         temphandle      = plot(det_slo{iCh}/Fs/60, lineHeight_hyp - 0.1*iCh, 'ko'); hold on
-        if iCh == 1
+        if iCh == num_chans
             handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
         end
         clear temphandle
@@ -179,7 +179,7 @@ if spi
 	for iCh = 1:num_chans
 		if ~isempty(det_spi{iCh})
 			temphandle      = plot(det_spi{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.02, 'ro'); hold on
-			if iCh == 1
+			if iCh == num_chans
 				handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
 			end
 			clear temphandle
@@ -190,7 +190,7 @@ if rip
     for iCh = 1:num_chans
         if ~isempty(det_rip{iCh})
             temphandle      = plot(det_rip{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.04, 'go'); hold on
-            if iCh == 1
+            if iCh == num_chans
                 handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
             end
             clear temphandle
