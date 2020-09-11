@@ -34,7 +34,9 @@ if isfield(output, 'spi')
     det_spi					= output.spi.events;
     % Find center of each spindle
     for iCh = 1:numel(det_spi)
-        det_spi{iCh} = det_spi{iCh}(1,:) + (det_spi{iCh}(2,:) - det_spi{iCh}(1,:))/2;
+		if ~isempty(det_spi{iCh})
+			det_spi{iCh} = det_spi{iCh}(1,:) + (det_spi{iCh}(2,:) - det_spi{iCh}(1,:))/2;
+		end
     end
 else
     spi						= 0;
@@ -174,13 +176,15 @@ if slo
     end
 end
 if spi
-    for iCh = 1:num_chans
-        temphandle      = plot(det_spi{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.02, 'ro'); hold on
-        if iCh == 1
-            handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
-        end
-        clear temphandle
-    end
+	for iCh = 1:num_chans
+		if ~isempty(det_spi{iCh})
+			temphandle      = plot(det_spi{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.02, 'ro'); hold on
+			if iCh == 1
+				handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
+			end
+			clear temphandle
+		end
+	end
 end
 if rip
     for iCh = 1:num_chans

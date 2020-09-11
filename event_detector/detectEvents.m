@@ -116,6 +116,7 @@ function output = detectEvents(cfg, data)
 % . NN: SO-check should delete SOs completely (see todo comment)
 % . artifact handling! currently, events are detected based on NREM episodes, which are unaffected by artifacts. only std/amp calculations exclude artifact since they are based on scoring_fine, in which artifacts are marked (99).
 %   one solution possible: add after each event detection another check for any overlaps with artifacts
+% . iEpoch should always be iEp (its episodes)
 %
 % AUTHORS:
 % Jens Klinzing, klinzing@princeton.edu
@@ -142,6 +143,9 @@ Fs = data.fsample;
 % Set default values - general
 if ~isfield(cfg, 'debugging') % undocumented debugging option
 	cfg.debugging				= 0; % in s
+end
+if ~isfield(cfg, 'verbose') % undocumented debugging option
+	cfg.verbose					= 0; % in s
 end
 if isfield(cfg, 'artfctdef') && ~isfield(cfg, 'artfctpad')
 	cfg.artfctpad = 0.5;
@@ -437,6 +441,8 @@ if cfg.spectrum
 		tmp_rem						= ft_redefinetrial(cfg_tmp, tmp_rem);
 	end
 	
+	ft_warning off % makes the output unreadable otherwise (will be turned on again below)
+	
 	% Calculate spectra
 	cfg_tmp						= [];
 	cfg_tmp.foi					= spec_freq(1):0.05:spec_freq(2);
@@ -444,7 +450,7 @@ if cfg.spectrum
 	cfg_tmp.pad					= 'nextpow2';
 	fra_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
 	if rem
-		fra_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+		fra_rem					= ft_freqanalysis(cfg_tmp, tmp_rem);
 	end
 
 	
@@ -452,11 +458,12 @@ if cfg.spectrum
 	cfg_tmp.taper 				= 'hanning';
 	mix_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
 	if rem
-		mix_rem						= ft_freqanalysis(cfg_tmp, tmp_rem);
+		mix_rem					= ft_freqanalysis(cfg_tmp, tmp_rem);
 	end
 
 	clear tmp_nrem tmp_rem
-
+	ft_warning on
+	
 	% Calculate the oscillatory component by subtracting the fractal from the
 	% mixed component
 	cfg_tmp						= [];
@@ -549,8 +556,14 @@ if cfg.spi
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
 	for iEpoch = 1:size(NREMEpisodes,2)
+		if cfg.verbose, disp(['********* Detectiong spindles in NREM episode: ' num2str(iEpoch) ' / ' num2str(size(NREMEpisodes,2))]), end
 		spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
 		for iCh = 1:numel(chans)
+			if cfg.verbose
+				disp(['****** Working on channel: ' num2str(iCh)])
+% 				tic
+			end
+			
 			% First threshold criterion
 			% Where does the smoothed envelope cross the threshold?
 			FastSpiAmplitudeTmp = smooth(spi_amp_tmp(iCh, :),0.1 * Fs); % get smoothed instantaneous amplitude (integer is the span of the smoothing) - !! does almost nothing
@@ -573,12 +586,12 @@ if cfg.spi
 				plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
 			end
 
-      % Delete spindle if it is cut by end or beginning of epoch
-			if ~isempty(SpiBeginning) || ~isempty(SpiEnd)
+			% Delete spindle if it is cut by end or beginning of epoch
+			if ~isempty(SpiBeginning) && ~isempty(SpiEnd)
 				if length(SpiEnd)<length(SpiBeginning) % if at the end
 					SpiBeginning(:,end)=[];
 				end
-				if SpiBeginning(1,1)==1 % ...or the beginning
+				if ~isempty(SpiBeginning) && SpiBeginning(1,1)==1 % ...or the beginning
 					SpiBeginning(:,1) = [];
 					SpiEnd(:,1) = [];
 				end
@@ -590,12 +603,16 @@ if cfg.spi
 			
 			CurrentSpindles = spi{iEpoch,iCh};
 			TempIdx = []; % these spindle candidates will be eliminated
-			for iSpi = 1: size (CurrentSpindles,2)
+			for iSpi = 1:size(CurrentSpindles,2)
+				if cfg.verbose
+					disp(['Spindel ' num2str(iSpi)])
+					toc
+				end
 				window_size = 5 * Fs; % in sec
-				if CurrentSpindles(2,iSpi)+window_size < length(data_spi.trial{1}(iCh,:)) %delete Spi to close to recording end
-					DataTmpSpi = data_spi.trial{1}(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filteres spindle signal for eachspindle + - 5sec
+				if CurrentSpindles(2,iSpi)+window_size < data_spi.sampleinfo(2) %delete Spi to close to recording end
+					DataTmpSpi = data_spi.trial{1}(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filtered spindle signal for each spindle + - 5sec
 					FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
-					
+		
 					% Second threshold criterion
 					above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(2, iCh);
 					isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(2)*Fs, cfg.spi_dur_max(2)*Fs]); %find spindle within duration range
@@ -614,7 +631,7 @@ if cfg.spi
 					TempIdx = [TempIdx iSpi];
 				end
 			end
-			spi{iEpoch,iCh}(:,TempIdx)=[];%if not criteriy fullfilled delete detected spindle
+			spi{iEpoch,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
 		end
 	end
 	
@@ -877,7 +894,7 @@ if cfg.rip
 			TempIdx = [];
 			for irip = 1: size (CurrentRipples,2)
 				window_size = 0.5 * Fs; % in sec
-				if  CurrentRipples(2,irip)+window_size < length(data_rip.trial{1}(iCh,:)) %check for distance to recording end
+				if  CurrentRipples(2,irip)+window_size < data_rip.sampleinfo(2) %check for distance to recording end
 					DataTmprip = data_rip.trial{1}(iCh, CurrentRipples(1,irip)-window_size : CurrentRipples(2,irip)+window_size); %get filteres ripple signal for eachripple + - 5sec
 					RipAmplitudeTmp = smooth(abs(hilbert(DataTmprip')),0.004*Fs);%get smoothed instantaneous amplitude
 					
