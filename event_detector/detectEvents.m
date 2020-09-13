@@ -264,6 +264,8 @@ output.info.length			= size(data.trial{1},2);
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
 output.info.name			= cfg.name;
+output.info.warnings		= {};
+wng_cnt						= 0;
 
 %% PREPARATIONS
 chans						= data.label;
@@ -285,7 +287,9 @@ end
 % Compensate if scoring and data don't have the same length
 tmp_diff					= size(data.trial{1},2) - length(cfg.scoring)*multi;
 if tmp_diff < 0 % this should not happen or only be -1
-	warning(['Data is shorter than scoring by ' num2str(tmp_diff * -1) ' sample(s). Will act as if I hadn''t seen this.'])
+	wng = ['Data is shorter than scoring by ' num2str(tmp_diff * -1) ' sample(s). Will act as if I hadn''t seen this.'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
+	warning(wng)
 elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS)
 	data.trial{1}(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
@@ -302,7 +306,9 @@ output.info.scoring_fine	= scoring_fine; % Let's return the scoring without arti
 
 % Mark artifacts in sleep scoring
 if isfield(cfg, 'artfctdef')
-	warning('Artifact handling is new and should be double-checked.')
+	wng = ['Artifact handling is new and should be double-checked.'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
+	warning(wng)
 	for iArt = 1:size(cfg.artfctdef, 1)
 		a_beg = cfg.artfctdef(iArt, 1) -  cfg.artfctpad*Fs;
 		if a_beg < 1 % padding shouldnt go to far
@@ -982,7 +988,9 @@ end
 %% Theta
 % Calculates theta amplitude during REM
 if cfg.the && ~rem
-	warning('Theta amplitude requested but no REM in data. Skipping...')
+	wng = ['Theta amplitude requested but no REM in data. Skipping...'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
+	warning(wng)
 elseif cfg.the
 	disp('Starting computation of theta amplitude...')
 	
@@ -1021,6 +1029,10 @@ if isfield(cfg, 'gen') && ~isempty(cfg.gen)
 		end
 		output.(event_types{iEt}) = generic_detector(cfg.gen.(event_types{iEt}), data);
 	end
+end
+
+if wng_cnt > 0
+	warning(['Dataset has been processed but ' num2str(wng_cnt) ' warning(s) have been thrown by detectEvents(). You can find them at output.info.warning.'])
 end
 end
 
