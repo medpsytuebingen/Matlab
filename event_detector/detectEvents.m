@@ -103,18 +103,15 @@ function output = detectEvents(cfg, data)
 %
 %
 % Todo:
-% . Polaritaet checkcen (EEG vs. invasive)
-% . rework output: all data in one row per channel, also per ep and for
+% . Allow switch of polarity in a subset of channels (EEG vs. invasive)
+% . Rework output: All data in one row per channel, also per ep and for
 % entire recording
-% . merging of close events?
-% . artifact handling! currently, events are detected based on NREM episodes, which are unaffected by artifacts. only std/amp calculations exclude artifact since they are based on scoring_fine, in which artifacts are marked (99).
-%   one solution possible: add after each event detection another check for any overlaps with artifacts
+% . Do merging of close events / check again for length?
 %
 % AUTHORS:
 % Jens Klinzing, klinzing@princeton.edu
 % Niels Niethard, niels.niethard@medizin.uni-tuebingen.de (main detection algorithms)
 % Hong-Viet V. Ngo, h.ngo@donders.ru.nl & Til Ole Bergmann, til-ole.bergmann@lir-mainz.de (generic detection algorithm)
-
 
 %% INPUT VALIDATION AND SETUP
 % Check for required fields in cfg
