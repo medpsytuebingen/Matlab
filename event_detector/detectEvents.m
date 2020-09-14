@@ -103,20 +103,12 @@ function output = detectEvents(cfg, data)
 %
 %
 % Todo:
-% . also add a hypno function (adding for each sample the sleep stage) + a
-% function that tells you for each sample whether its solid in a sleep
-% stage: isStage(FT-Structure, sample, boundary_in_sec)
 % . Polaritaet checkcen (EEG vs. invasive)
-% . add further dataset information to .info
-% . slow spindles 8-12 hz
-% . rework variable naming inside function and output
 % . rework output: all data in one row per channel, also per ep and for
 % entire recording
 % . merging of close events?
-% . NN: SO-check should delete SOs completely (see todo comment)
 % . artifact handling! currently, events are detected based on NREM episodes, which are unaffected by artifacts. only std/amp calculations exclude artifact since they are based on scoring_fine, in which artifacts are marked (99).
 %   one solution possible: add after each event detection another check for any overlaps with artifacts
-% . iEpoch should always be iEp (its episodes)
 %
 % AUTHORS:
 % Jens Klinzing, klinzing@princeton.edu
@@ -265,6 +257,8 @@ output.info.length			= size(data_raw,2);
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
 output.info.name			= cfg.name;
+output.info.warnings		= {};
+wng_cnt						= 0;
 
 %% PREPARATIONS
 chans						= data.label;
@@ -286,7 +280,9 @@ end
 % Compensate if scoring and data don't have the same length
 tmp_diff					= output.info.length - length(cfg.scoring)*multi;
 if tmp_diff < 0 % this should not happen or only be -1
-	warning(['Data is shorter than scoring by ' num2str(tmp_diff * -1) ' sample(s). Will act as if I hadn''t seen this.'])
+	wng = ['Data is shorter than scoring by ' num2str(tmp_diff * -1) ' sample(s). Will act as if I hadn''t seen this.'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
+	warning(wng)
 elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS)
 	data_raw(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
@@ -303,7 +299,9 @@ output.info.scoring_fine	= scoring_fine; % Let's return the scoring without arti
 
 % Mark artifacts in sleep scoring
 if isfield(cfg, 'artfctdef')
-	warning('Artifact handling is new and should be double-checked.')
+	wng = ['Artifact handling is new and should be double-checked.'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
+	warning(wng)
 	for iArt = 1:size(cfg.artfctdef, 1)
 		a_beg = cfg.artfctdef(iArt, 1) -  cfg.artfctpad*Fs;
 		if a_beg < 1 % padding shouldnt go to far
@@ -318,8 +316,8 @@ if isfield(cfg, 'artfctdef')
 		end
 		scoring_fine(a_beg:a_end) = 99;
 	end
+	output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts removed
 end
-output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts removed
 
 % Extract episodes (save in seconds)
 % NREM
@@ -453,8 +451,6 @@ if cfg.spectrum
 	if rem
 		fra_rem					= ft_freqanalysis(cfg_tmp, tmp_rem);
 	end
-
-	
 	cfg_tmp.method 				= 'mtmfft';
 	cfg_tmp.taper 				= 'hanning';
 	mix_nrem					= ft_freqanalysis(cfg_tmp, tmp_nrem);
@@ -506,7 +502,6 @@ if cfg.spectrum
 	end
 end
 
-
 %% Spindles
 if cfg.spi
 	disp('Starting spindle detection...')
@@ -557,9 +552,9 @@ if cfg.spi
 
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
-	for iEpoch = 1:size(NREMEpisodes,2)
-		if cfg.verbose, disp(['********* Detectiong spindles in NREM episode: ' num2str(iEpoch) ' / ' num2str(size(NREMEpisodes,2))]), end
-		spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+	for iEp = 1:size(NREMEpisodes,2)
+		if cfg.verbose, disp(['********* Detectiong spindles in NREM episode: ' num2str(iEp) ' / ' num2str(size(NREMEpisodes,2))]), end
+		spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
 		for iCh = 1:numel(chans)
 			if cfg.verbose
 				disp(['****** Working on channel: ' num2str(iCh)])
@@ -578,7 +573,7 @@ if cfg.spi
 			% Some plots for debugging
 			if cfg.debugging
 				win = 1:50000;
-				spi_raw = spi_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+				spi_raw = data_spi.trial{1}(iCh, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
 				plot(win/Fs, spi_raw(1,win)), hold on			% raw signal
 				plot(win/Fs, spi_amp_tmp(iCh,win), 'r')			% envelope
 				plot(win/Fs, FastSpiAmplitudeTmp(win), 'r')		% smoothed envelope
@@ -596,18 +591,21 @@ if cfg.spi
                     SpiEnd(:,1) = [];
 				end
 				FastSpindles = [SpiBeginning;SpiEnd];
-				spi{iEpoch,iCh} = FastSpindles+(NREMEpisodes(1,iEpoch)*Fs);%include beginning of NREMEpoch
+				spi{iEp,iCh} = FastSpindles+(NREMEpisodes(1,iEp)*Fs);%include beginning of NREMEpoch
 			else
-				spi{iEpoch,iCh} = [];
+				spi{iEp,iCh} = [];
 			end
 			
-			CurrentSpindles = spi{iEpoch,iCh};
+			CurrentSpindles = spi{iEp,iCh};
 			TempIdx = []; % these spindle candidates will be eliminated
 			for iSpi = 1:size(CurrentSpindles,2)
 				if cfg.verbose
 					disp(['Spindel ' num2str(iSpi)])
 					toc
 				end
+				
+				% If spindle is too close to the recording end, get rid of
+				% it right away, otherwise check all other criteria
 				window_size = 5 * Fs; % in sec
 				if CurrentSpindles(2,iSpi)+window_size < data_spi.sampleinfo(2) %delete Spi to close to recording end
 					DataTmpSpi = spi_raw(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filtered spindle signal for each spindle + - 5sec
@@ -622,16 +620,17 @@ if cfg.spi
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.spi_dur_max(1)*Fs]); %find spindle within duration range
 					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', thr(1, iCh));
 
-					if sum(double(isLongEnough))>1 && sum(double(MaxIsThere))>1 && max(diff(locs))<0.125 * Fs %check if long enough spindle is present and check that no peak to peak distance is more than 125ms
-						% do nothing
-					else %if criteria not fullfilled store index of Spindles and kill it later
+					% Check whether the two criteria above are fulfilled 
+					% + no peak-to-peak distance is more than 125ms
+					% + the event does not overlap with an artifact
+					if ~any(isLongEnough) || ~any(MaxIsThere) || max(diff(locs)) > 0.125 * Fs || any(scoring_fine(CurrentSpindles(1,iSpi):CurrentSpindles(2,iSpi)) == 99)
 						TempIdx = [TempIdx iSpi];
 					end
 				else
 					TempIdx = [TempIdx iSpi];
 				end
 			end
-			spi{iEpoch,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
+			spi{iEp,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
 		end
 	end
 	
@@ -640,10 +639,10 @@ if cfg.spi
 	for iCh = 1:numel(chans)
 		TotalNumberOfSpi = 0;
 		EpisodeDurations = 0;
-		for iEpoch = 1:size(spi,1)
-			CurrentSpindles = spi{iEpoch,iCh};
+		for iEp = 1:size(spi,1)
+			CurrentSpindles = spi{iEp,iCh};
 			TotalNumberOfSpi = TotalNumberOfSpi +size(CurrentSpindles,2);
-			EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEpoch)-NREMEpisodes(1,iEpoch);
+			EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEp)-NREMEpisodes(1,iEp);
 		end
 		output.spi.density(iCh) = TotalNumberOfSpi/(EpisodeDurations/60); %spindle density in spindles per minute
 	end
@@ -684,9 +683,9 @@ if cfg.slo
 	SOEpisodes = cell(numel(chans),1);
 	for iCh = 1:numel(chans)
 		SoThreshold = slo_mean(iCh) + cfg.slo_thr * slo_std(iCh);
-		for iEpoch = 1:size(NREMEpisodes,2)
+		for iEp = 1:size(NREMEpisodes,2)
 			% Find potential SOs ('episodes')
-			slo_tmp			= slo_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs)';
+			slo_tmp			= slo_raw(iCh, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs)';
 			SOBegEpisode	= strfind((slo_tmp<-SoThreshold)',[0 1])-1;
 			SOEndEpisode	= strfind((slo_tmp<-SoThreshold)',[1 0]);
 			if slo_tmp(1) < -SoThreshold % if NREMepisode starts under the threshold, throw away that find (might be redundant to an exclusion done earlier
@@ -702,24 +701,26 @@ if cfg.slo
 				end
 				% Turn within-episode sample into recording sample and add it
 				% to result
-				SOEpisodes{iCh,1} = [SOEpisodes{iCh,1} [SOBegEpisode+NREMEpisodes(1,iEpoch)*Fs; SOEndEpisode+NREMEpisodes(1,iEpoch)*Fs]];
+				SOEpisodes{iCh,1} = [SOEpisodes{iCh,1} [SOBegEpisode+NREMEpisodes(1,iEp)*Fs; SOEndEpisode+NREMEpisodes(1,iEp)*Fs]];
 			end
 		end
 	end
 	
-	% Check for further characteristics based on zero crossings
+	% Check for violations of criteria, overlap with artifacts and further
+	% characteristics based on zero crossings
 	ZeroCrossings = cell(numel(chans),1);
 	for iCh = 1:numel(chans)
 		SOEpisodes{iCh,1} = round(SOEpisodes{iCh,1});%compensate if Fs is not integer
 		ZeroCrossings{iCh,1} = zeros(3,size(SOEpisodes{iCh,1},2));
         TmpIndex = [];
         for iEvent = 1:size(SOEpisodes{iCh,1},2)
-            X = 0;  % marker for left zero crossing found
-            Y = 0;  % marker for right zero crossing found (1) + right plus-to-minus crossing after the upstate (2)
-            if SOEpisodes{iCh,1}(2,iEvent)+2*Fs < length(slo_raw) %nly if enough space until rec end
-                for iSearchCrossing = 1:2*Fs
-                    if X == 0 && slo_raw(iCh, SOEpisodes{iCh,1}(1,iEvent)-iSearchCrossing)>0
-                        ZeroCrossings{iCh,1} (1,iEvent) = SOEpisodes{iCh,1}(1,iEvent)-iSearchCrossing;
+			% Check time to recording end
+			if SOEpisodes{iCh,1}(2,iEvent)+2*Fs < data.sampleinfo(2)
+				X = 0;  % marker for left zero crossing found
+				Y = 0;  % marker for right zero crossing found (1) + right plus-to-minus crossing after the upstate (2)
+				for iSearchCrossing = 1:2*Fs
+					if X == 0 && slo_raw(iCh, SOEpisodes{iCh,1}(1,iEvent)-iSearchCrossing)>0
+						ZeroCrossings{iCh,1} (1,iEvent) = SOEpisodes{iCh,1}(1,iEvent)-iSearchCrossing;
                         X = 1;
                     end
                     if Y == 0 && slo_raw(iCh, SOEpisodes{iCh,1}(2,iEvent)+iSearchCrossing)>0
@@ -770,11 +771,18 @@ if cfg.slo
 			NegativePeaks{iCh,1}(iEvent,1) = ZeroCrossings{iCh,1}(1,iEvent)+I;
         end
 		
-		% Calculate waveforms
+		% Calculate waveforms, check again for SOs / waveform windows at the end and delete SOs overlapping with artifacts
         twindow						= 2.5; % data will be +/- twindow
         SOGA{iCh,1}					= zeros(size(NegativePeaks{iCh,1},1),round(twindow*2*Fs + 1));
         TmpIndex = find(NegativePeaks{iCh,1}(:,1)+round(twindow*Fs) > length(slo_raw));%delete Event that is to close to recording end
-              
+        
+		% Check for overlaps with artifacts (has to be done that late
+		% because only now do we know the full extent of the SO (with up
+		% state)
+		for iSO = 1:size(ZeroCrossings{iCh,1},2)
+			TmpIndex = [TmpIndex find(any(scoring_fine(ZeroCrossings{iCh,1}(1,iSO):ZeroCrossings{iCh,1}(3,iSO)) == 99))];
+		end
+		
         NegativePeaks{iCh,1}(TmpIndex,:) = [];
         ZeroCrossings{iCh,1}(:,TmpIndex) = [];
         Peak2PeakAmp{iCh,1}(TmpIndex,:)  = [];
@@ -783,7 +791,6 @@ if cfg.slo
             SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
         end
 		
-        
 		% SO-spindle coupling
 		if cfg.spi && size(output.spi.events{iCh},2) > 0 % if there are spindles in this channel
 			% Method 1: Extract SO phase at point of peak amplitude in spindle
@@ -852,8 +859,8 @@ if cfg.rip
 	rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
 	rip = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected ripples
-	for iEpoch = 1:size(NREMEpisodes,2)
-		rip_amp_tmp = rip_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+	for iEp = 1:size(NREMEpisodes,2)
+		rip_amp_tmp = rip_amp(:, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
         CurrentControlRipples = [];
 		for iCh = 1:numel(chans)
 			% First threshold criterion for min duration
@@ -868,7 +875,7 @@ if cfg.rip
 			% Some plots for debugging
 			if cfg.debugging
 				win = 1:50000;
-				rip_raw = rip_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+				rip_raw = data_rip.trial{1}(iCh, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
 				plot(win/Fs, rip_raw(1,win)), hold on			% raw signal
 				plot(win/Fs, rip_amp_tmp(iCh,win), 'r')			% envelope
 				plot(win/Fs, RipAmplitudeTmp(win), 'r')		% smoothed envelope
@@ -886,12 +893,12 @@ if cfg.rip
 					ripEnd(:,1) = [];
 				end
 				ripples = [ripBeginning;ripEnd];
-				rip{iEpoch,iCh} = ripples+(NREMEpisodes(1,iEpoch)*Fs);%include beginning of NREMEpoch
+				rip{iEp,iCh} = ripples+(NREMEpisodes(1,iEp)*Fs);%include beginning of NREMEpoch
 			else
-				rip{iEpoch,iCh} = [];
+				rip{iEp,iCh} = [];
 			end
 			
-			CurrentRipples = rip{iEpoch,iCh};
+			CurrentRipples = rip{iEp,iCh};
 			TempIdx = [];
 			for irip = 1: size (CurrentRipples,2)
 				window_size = 0.5 * Fs; % in sec
@@ -902,15 +909,13 @@ if cfg.rip
 					% Second Peak threshold criterion
 					above_Max = RipAmplitudeTmp(window_size:end-window_size) > cfg.rip_thr(2)*rip_amp_std(iCh);
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.rip_dur_max(1)*Fs]); %find ripple within duration range
-					if sum(double(MaxIsThere))>=1 %check if Max Amplitude is high enough 
-						% do nothing
-                    else %if criteria not fullfilled store index of ripple and kill it later
+					if ~any(MaxIsThere) || any(scoring_fine(CurrentRipples(1,irip):CurrentRipples(2,irip)) == 99)
                         TempIdx = [TempIdx irip];
                     end
                     if isfield(cfg,'rip_control_Chan')
                         if strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)%check for detected common noise in control channel
-                            CurrentControlRipples = [CurrentControlRipples rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)}];
-                            rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)} = [];
+                            CurrentControlRipples = [CurrentControlRipples rip{iEp,strcmp(data_rip.label,cfg.rip_control_Chan.label)}];
+                            rip{iEp,strcmp(data_rip.label,cfg.rip_control_Chan.label)} = [];
                         end
                         if ~isempty(CurrentControlRipples)
                             if any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
@@ -926,7 +931,7 @@ if cfg.rip
 			end
             if strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)
             else
-                rip{iEpoch,iCh}(:,TempIdx)=[];%if criteria is not fullfilled delete detected ripple
+                rip{iEp,iCh}(:,TempIdx)=[];%if criteria is not fullfilled delete detected ripple
             end
 		end
 	end
@@ -936,10 +941,10 @@ if cfg.rip
 	for iCh = 1:numel(chans)
 		TotalNumberOfRip = 0;
 		EpisodeDurations = 0;
-		for iEpoch = 1:size(rip,1)
-			CurrentRipples = rip{iEpoch,iCh};
+		for iEp = 1:size(rip,1)
+			CurrentRipples = rip{iEp,iCh};
 			TotalNumberOfRip = TotalNumberOfRip +size(CurrentRipples,2);
-			EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEpoch)-NREMEpisodes(1,iEpoch);
+			EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEp)-NREMEpisodes(1,iEp);
 		end
 		output.rip.density(iCh) = TotalNumberOfRip/(EpisodeDurations/60); %ripple density in ripples per minute
 	end
@@ -984,7 +989,9 @@ end
 %% Theta
 % Calculates theta amplitude during REM
 if cfg.the && ~rem
-	warning('Theta amplitude requested but no REM in data. Skipping...')
+	wng = ['Theta amplitude requested but no REM in data. Skipping...'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
+	warning(wng)
 elseif cfg.the
 	disp('Starting computation of theta amplitude...')
 	
@@ -1004,10 +1011,10 @@ elseif cfg.the
 	
 	output.the.amp_mean_perREMep	= {};
 	output.the.amp_sum_perREMep		= {};
-	for iEpoch = 1:size(REMEpisodes,2)
+	for iEp = 1:size(REMEpisodes,2)
 		for iCh = 1:numel(chans)
-			output.the.amp_mean_perREMep{iCh,1}(iEpoch,1) = mean(the_amp(iCh, REMEpisodes(1,iEpoch):REMEpisodes(2,iEpoch)));
-			output.the.amp_sum_perREMep{iCh,1}(iEpoch,1) = sum(the_amp(iCh, REMEpisodes(1,iEpoch):REMEpisodes(2,iEpoch)));
+			output.the.amp_mean_perREMep{iCh,1}(iEp,1) = mean(the_amp(iCh, REMEpisodes(1,iEp):REMEpisodes(2,iEp)));
+			output.the.amp_sum_perREMep{iCh,1}(iEp,1) = sum(the_amp(iCh, REMEpisodes(1,iEp):REMEpisodes(2,iEp)));
 		end
 	end
 	% clear SOGA SOPhase SOSpiCoupling REMThetaMeanAmp REMThetaEnergy spi_amp
@@ -1023,6 +1030,10 @@ if isfield(cfg, 'gen') && ~isempty(cfg.gen)
 		end
 		output.(event_types{iEt}) = generic_detector(cfg.gen.(event_types{iEt}), data);
 	end
+end
+
+if wng_cnt > 0
+	warning(['Dataset has been processed successfully but ' num2str(wng_cnt) ' warning(s) was thrown. You can find them at output.info.warning.'])
 end
 end
 
