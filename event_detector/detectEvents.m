@@ -113,10 +113,8 @@ function output = detectEvents(cfg, data)
 % . rework output: all data in one row per channel, also per ep and for
 % entire recording
 % . merging of close events?
-% . NN: SO-check should delete SOs completely (see todo comment)
 % . artifact handling! currently, events are detected based on NREM episodes, which are unaffected by artifacts. only std/amp calculations exclude artifact since they are based on scoring_fine, in which artifacts are marked (99).
 %   one solution possible: add after each event detection another check for any overlaps with artifacts
-% . iEpoch should always be iEp (its episodes)
 %
 % AUTHORS:
 % Jens Klinzing, klinzing@princeton.edu
@@ -561,9 +559,9 @@ if cfg.spi
 
 	% Detect spindles
 	spi = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected spindles
-	for iEpoch = 1:size(NREMEpisodes,2)
-		if cfg.verbose, disp(['********* Detectiong spindles in NREM episode: ' num2str(iEpoch) ' / ' num2str(size(NREMEpisodes,2))]), end
-		spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+	for iEp = 1:size(NREMEpisodes,2)
+		if cfg.verbose, disp(['********* Detectiong spindles in NREM episode: ' num2str(iEp) ' / ' num2str(size(NREMEpisodes,2))]), end
+		spi_amp_tmp = spi_amp(:, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
 		for iCh = 1:numel(chans)
 			if cfg.verbose
 				disp(['****** Working on channel: ' num2str(iCh)])
@@ -583,7 +581,7 @@ if cfg.spi
 			% Some plots for debugging
 			if cfg.debugging
 				win = 1:50000;
-				spi_raw = data_spi.trial{1}(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+				spi_raw = data_spi.trial{1}(iCh, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
 				plot(win/Fs, spi_raw(1,win)), hold on			% raw signal
 				plot(win/Fs, spi_amp_tmp(iCh,win), 'r')			% envelope
 				plot(win/Fs, FastSpiAmplitudeTmp(win), 'r')		% smoothed envelope
@@ -601,12 +599,12 @@ if cfg.spi
                     SpiEnd(:,1) = [];
 				end
 				FastSpindles = [SpiBeginning;SpiEnd];
-				spi{iEpoch,iCh} = FastSpindles+(NREMEpisodes(1,iEpoch)*Fs);%include beginning of NREMEpoch
+				spi{iEp,iCh} = FastSpindles+(NREMEpisodes(1,iEp)*Fs);%include beginning of NREMEpoch
 			else
-				spi{iEpoch,iCh} = [];
+				spi{iEp,iCh} = [];
 			end
 			
-			CurrentSpindles = spi{iEpoch,iCh};
+			CurrentSpindles = spi{iEp,iCh};
 			TempIdx = []; % these spindle candidates will be eliminated
 			for iSpi = 1:size(CurrentSpindles,2)
 				if cfg.verbose
@@ -636,7 +634,7 @@ if cfg.spi
 					TempIdx = [TempIdx iSpi];
 				end
 			end
-			spi{iEpoch,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
+			spi{iEp,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
 		end
 	end
 	
@@ -645,10 +643,10 @@ if cfg.spi
 	for iCh = 1:numel(chans)
 		TotalNumberOfSpi = 0;
 		EpisodeDurations = 0;
-		for iEpoch = 1:size(spi,1)
-			CurrentSpindles = spi{iEpoch,iCh};
+		for iEp = 1:size(spi,1)
+			CurrentSpindles = spi{iEp,iCh};
 			TotalNumberOfSpi = TotalNumberOfSpi +size(CurrentSpindles,2);
-			EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEpoch)-NREMEpisodes(1,iEpoch);
+			EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEp)-NREMEpisodes(1,iEp);
 		end
 		output.spi.density(iCh) = TotalNumberOfSpi/(EpisodeDurations/60); %spindle density in spindles per minute
 	end
@@ -689,9 +687,9 @@ if cfg.slo
 	SOEpisodes = cell(numel(chans),1);
 	for iCh = 1:numel(chans)
 		SoThreshold = slo_mean(iCh) + cfg.slo_thr * slo_std(iCh);
-		for iEpoch = 1:size(NREMEpisodes,2)
+		for iEp = 1:size(NREMEpisodes,2)
 			% Find potential SOs ('episodes')
-			slo_tmp			= slo_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs)';
+			slo_tmp			= slo_raw(iCh, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs)';
 			SOBegEpisode	= strfind((slo_tmp<-SoThreshold)',[0 1])-1;
 			SOEndEpisode	= strfind((slo_tmp<-SoThreshold)',[1 0]);
 			if slo_tmp(1) < -SoThreshold % if NREMepisode starts under the threshold, throw away that find (might be redundant to an exclusion done earlier
@@ -707,7 +705,7 @@ if cfg.slo
 				end
 				% Turn within-episode sample into recording sample and add it
 				% to result
-				SOEpisodes{iCh,1} = [SOEpisodes{iCh,1} [SOBegEpisode+NREMEpisodes(1,iEpoch)*Fs; SOEndEpisode+NREMEpisodes(1,iEpoch)*Fs]];
+				SOEpisodes{iCh,1} = [SOEpisodes{iCh,1} [SOBegEpisode+NREMEpisodes(1,iEp)*Fs; SOEndEpisode+NREMEpisodes(1,iEp)*Fs]];
 			end
 		end
 	end
@@ -856,8 +854,8 @@ if cfg.rip
 	rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
 	rip = cell(size(NREMEpisodes,2),numel(chans)); % each cell will contain a two-row vector with beginning and ends of detected ripples
-	for iEpoch = 1:size(NREMEpisodes,2)
-		rip_amp_tmp = rip_amp(:, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+	for iEp = 1:size(NREMEpisodes,2)
+		rip_amp_tmp = rip_amp(:, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
         CurrentControlRipples = [];
 		for iCh = 1:numel(chans)
 			% First threshold criterion for min duration
@@ -872,7 +870,7 @@ if cfg.rip
 			% Some plots for debugging
 			if cfg.debugging
 				win = 1:50000;
-				rip_raw = data_rip.trial{1}(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+				rip_raw = data_rip.trial{1}(iCh, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
 				plot(win/Fs, rip_raw(1,win)), hold on			% raw signal
 				plot(win/Fs, rip_amp_tmp(iCh,win), 'r')			% envelope
 				plot(win/Fs, RipAmplitudeTmp(win), 'r')		% smoothed envelope
@@ -890,12 +888,12 @@ if cfg.rip
 					ripEnd(:,1) = [];
 				end
 				ripples = [ripBeginning;ripEnd];
-				rip{iEpoch,iCh} = ripples+(NREMEpisodes(1,iEpoch)*Fs);%include beginning of NREMEpoch
+				rip{iEp,iCh} = ripples+(NREMEpisodes(1,iEp)*Fs);%include beginning of NREMEpoch
 			else
-				rip{iEpoch,iCh} = [];
+				rip{iEp,iCh} = [];
 			end
 			
-			CurrentRipples = rip{iEpoch,iCh};
+			CurrentRipples = rip{iEp,iCh};
 			TempIdx = [];
 			for irip = 1: size (CurrentRipples,2)
 				window_size = 0.5 * Fs; % in sec
@@ -913,8 +911,8 @@ if cfg.rip
                     end
                     if isfield(cfg,'rip_control_Chan')
                         if strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)%check for detected common noise in control channel
-                            CurrentControlRipples = [CurrentControlRipples rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)}];
-                            rip{iEpoch,strcmp(data_rip.label,cfg.rip_control_Chan.label)} = [];
+                            CurrentControlRipples = [CurrentControlRipples rip{iEp,strcmp(data_rip.label,cfg.rip_control_Chan.label)}];
+                            rip{iEp,strcmp(data_rip.label,cfg.rip_control_Chan.label)} = [];
                         end
                         if ~isempty(CurrentControlRipples)
                             if any(ismember(CurrentControlRipples(1,:),CurrentRipples(1,irip):CurrentRipples(2,irip)))||... %check if control ripple Beginning is inside detected ripple
@@ -930,7 +928,7 @@ if cfg.rip
 			end
             if strcmp(data_rip.label{iCh},cfg.rip_control_Chan.label)
             else
-                rip{iEpoch,iCh}(:,TempIdx)=[];%if criteria is not fullfilled delete detected ripple
+                rip{iEp,iCh}(:,TempIdx)=[];%if criteria is not fullfilled delete detected ripple
             end
 		end
 	end
@@ -940,10 +938,10 @@ if cfg.rip
 	for iCh = 1:numel(chans)
 		TotalNumberOfRip = 0;
 		EpisodeDurations = 0;
-		for iEpoch = 1:size(rip,1)
-			CurrentRipples = rip{iEpoch,iCh};
+		for iEp = 1:size(rip,1)
+			CurrentRipples = rip{iEp,iCh};
 			TotalNumberOfRip = TotalNumberOfRip +size(CurrentRipples,2);
-			EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEpoch)-NREMEpisodes(1,iEpoch);
+			EpisodeDurations = EpisodeDurations + NREMEpisodes(2,iEp)-NREMEpisodes(1,iEp);
 		end
 		output.rip.density(iCh) = TotalNumberOfRip/(EpisodeDurations/60); %ripple density in ripples per minute
 	end
@@ -1010,10 +1008,10 @@ elseif cfg.the
 	
 	output.the.amp_mean_perREMep	= {};
 	output.the.amp_sum_perREMep		= {};
-	for iEpoch = 1:size(REMEpisodes,2)
+	for iEp = 1:size(REMEpisodes,2)
 		for iCh = 1:numel(chans)
-			output.the.amp_mean_perREMep{iCh,1}(iEpoch,1) = mean(the_amp(iCh, REMEpisodes(1,iEpoch):REMEpisodes(2,iEpoch)));
-			output.the.amp_sum_perREMep{iCh,1}(iEpoch,1) = sum(the_amp(iCh, REMEpisodes(1,iEpoch):REMEpisodes(2,iEpoch)));
+			output.the.amp_mean_perREMep{iCh,1}(iEp,1) = mean(the_amp(iCh, REMEpisodes(1,iEp):REMEpisodes(2,iEp)));
+			output.the.amp_sum_perREMep{iCh,1}(iEp,1) = sum(the_amp(iCh, REMEpisodes(1,iEp):REMEpisodes(2,iEp)));
 		end
 	end
 	% clear SOGA SOPhase SOSpiCoupling REMThetaMeanAmp REMThetaEnergy spi_amp
