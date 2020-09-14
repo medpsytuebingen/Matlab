@@ -255,7 +255,7 @@ if slo
         y_lim = ylim;
         spi_y = y_lim(1) + (y_lim(2)-y_lim(1))/3; % plot spindles at 1/3 of the ylim height
         
-        if spi
+		if spi
             % Draw spindles into SO plot
             for iEv = 1:size(output.spi.events{iCh},2)
                 spi_center = round(output.spi.events{iCh}(1,iEv) + (output.spi.events{iCh}(2,iEv)-output.spi.events{iCh}(1,iEv))/2);
@@ -268,44 +268,41 @@ if slo
                 end
             end
             
-            % Add polar histograms
+            % Add polar histograms for Spi amplitude peaks, Spi detections, Rip detections
             if isfield(output, 'SloSpiAmpCoupling')
-                axes('pos',[p.Position(1) p.Position(2)+p.Position(4)*.11 p.Position(3)*.2 p.Position(3)*.2]) % left, bottom, width, height
+                axes('pos',[p.Position(1)-.01 p.Position(2)+p.Position(4)*.1 p.Position(3)*.18 p.Position(3)*.18]) % left, bottom, width, height
                 pol = polarhistogram(deg2rad(output.SloSpiAmpCoupling{iCh}));
                 pol.Parent.ThetaAxis.Visible = 'off';
                 pol.Parent.RAxis.Visible = 'off';
-                if iCh == 1
-                    title(sprintf(['SO Phase spindle band amp peak\n n=' num2str(numel(output.SloSpiAmpCoupling{iCh}))]),  'FontSize', 6)
-                else
-                    title(['n=' num2str(numel(output.SloSpiAmpCoupling{iCh}))],  'FontSize', 6)
-                end
-            end
+				pol.FaceColor = [.2 .2 .2];
+				if iCh == 1
+					title(sprintf(['SO Phase spindle band amp peak']),  'FontSize', 8)
+				end
+				annotation(p.Parent, 'textbox', [p.Position(1)-0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['SO\nn=' num2str(numel(output.SloSpiAmpCoupling{iCh}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'black')
+			end
             if isfield(output, 'SloSpiDetCoupling')
-                axes('pos',[p.Position(1)+p.Position(3)*.8 p.Position(2)+p.Position(4)*.11 p.Position(3)*.2 p.Position(3)*.2]) % left (first argument) had +p.Position(3)*.7
+                axes('pos',[p.Position(1)+0.025 p.Position(2)+p.Position(4)*.1 p.Position(3)*.18 p.Position(3)*.18]) % left (first argument) had +p.Position(3)*.7
                 pol = polarhistogram(deg2rad(output.SloSpiDetCoupling{iCh}));
                 pol.Parent.ThetaAxis.Visible = 'off';
                 pol.Parent.RAxis.Visible = 'off';
-                if iCh == 1
-                    title(sprintf(['SO Phase detected spindle peak\n n=' num2str(numel(output.SloSpiDetCoupling{iCh}))]),  'FontSize', 6, 'Color', 'red')
-                else
-                    title(['n=' num2str(numel(output.SloSpiDetCoupling{iCh}))],  'FontSize', 6, 'Color', 'red')
-                end
+				pol.FaceColor = 'red';
+				if iCh == 1
+					title({'SO Phase detected spindle peak', ' '},  'FontSize', 8, 'Color', 'red')
+				end
+				annotation(p.Parent, 'textbox', [p.Position(1)-0.03, p.Position(2), 0.03, p.Position(4)/2], 'String', sprintf(['Spi\nn=' num2str(numel(output.SloSpiDetCoupling{iCh}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'red')
             end
-            %plot spindle ripple coupling
             if isfield(output, 'SpiRipDetCoupling')
-                axes('pos',[p.Position(1)+p.Position(3)*.8 p.Position(2)+p.Position(4)*.71 p.Position(3)*.2 p.Position(3)*.2]) % left (first argument) had +p.Position(3)*.7
+                axes('pos',[p.Position(1)+p.Position(3)*.81 p.Position(2)+p.Position(4)*.1 p.Position(3)*.18 p.Position(3)*.18]) % left (first argument) had +p.Position(3)*.7
                 pol = polarhistogram(deg2rad(output.SpiRipDetCoupling{iCh}));
                 pol.Parent.ThetaAxis.Visible = 'off';
                 pol.Parent.RAxis.Visible = 'off';
-                pol.FaceColor ='g';
-                if iCh == 1
-                    title(sprintf(['Spi Phase detected ripple peak\n n=' num2str(numel(output.SloSpiDetCoupling{iCh}))]),  'FontSize', 6, 'Color', 'green')
-                else
-                    title(['n=' num2str(numel(output.SpiRipDetCoupling{iCh}))],  'FontSize', 6, 'Color', 'green')
-                end
+                pol.FaceColor = [0.4940 0.1840 0.5560];
+				if iCh == 1
+					title(sprintf(['Spi Phase detected ripple peak']),  'FontSize', 8, 'Color', [0.4940 0.1840 0.5560])
+				end
+				annotation(p.Parent, 'textbox', [p.Position(1)+p.Position(3)+0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['Rip\nn=' num2str(numel(output.SpiRipDetCoupling{iCh}))]),  'FontSize', 7,'EdgeColor','none', 'Color', [0.4940 0.1840 0.5560])
             end
-        end
-        
+		end
     end
 end
 drawnow
