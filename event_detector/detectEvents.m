@@ -138,7 +138,8 @@ if length(data.trial) ~= 1, error('Function only accepts single-trial data.'), e
 if any(size(data.sampleinfo) ~= [1 2]), error('Sampleinfo looks like data does not contain exactly one trial.'), end
 if size(cfg.scoring, 1) == 1, cfg.scoring = cfg.scoring'; end
 if size(data.label, 1) == 1, data.label = data.label'; end
-Fs = data.fsample;
+Fs			= data.fsample;
+data_raw	= data.trial{1};
 
 % Set default values - general
 if ~isfield(cfg, 'debugging') % undocumented debugging option
@@ -260,7 +261,7 @@ end
 output						= [];
 output.info.cfg				= cfg;
 output.info.Fs				= Fs;
-output.info.length			= size(data.trial{1},2);
+output.info.length			= size(data_raw,2);
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
 output.info.name			= cfg.name;
@@ -283,18 +284,18 @@ if isfield(cfg, 'artfctdef')
 end
 
 % Compensate if scoring and data don't have the same length
-tmp_diff					= size(data.trial{1},2) - length(cfg.scoring)*multi;
+tmp_diff					= output.info.length - length(cfg.scoring)*multi;
 if tmp_diff < 0 % this should not happen or only be -1
 	warning(['Data is shorter than scoring by ' num2str(tmp_diff * -1) ' sample(s). Will act as if I hadn''t seen this.'])
 elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS)
-	data.trial{1}(:, end-(tmp_diff-1):end)	= [];
+	data_raw(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
 	data.sampleinfo(2) = data.sampleinfo(2) - tmp_diff;
 end
 clear tmp_diff
 
 % Create upsampled scoring vector
-scoring_fine	= zeros(size(data.trial{1},2),1);
+scoring_fine	= zeros(size(data_raw,2),1);
 for iEp = 1:length(cfg.scoring)
 	scoring_fine((iEp-1)*multi+1 : (iEp)*multi) = cfg.scoring(iEp);
 end
@@ -406,8 +407,8 @@ if cfg.spectrum
 	cfg_tmp.trl					= [nrem_begs' nrem_ends' zeros(length(nrem_ends'),1)];
 	tmp_nrem					= ft_redefinetrial(cfg_tmp, data);
 	if rem
-		cfg_tmp.trl					= [rem_begs' rem_ends' zeros(length(rem_ends'),1)];
-		tmp_rem						= ft_redefinetrial(cfg_tmp, data);
+		cfg_tmp.trl				= [rem_begs' rem_ends' zeros(length(rem_ends'),1)];
+		tmp_rem					= ft_redefinetrial(cfg_tmp, data);
 	end
 	
 	% Downsample data to speed up spectral estimates (done before cutting
@@ -428,7 +429,7 @@ if cfg.spectrum
 		cfg_tmp.resamplefs  = res_freq;
 		tmp_nrem			= ft_resampledata(cfg_tmp, tmp_nrem);
 		if rem
-			tmp_rem				= ft_resampledata(cfg_tmp, tmp_rem);
+			tmp_rem			= ft_resampledata(cfg_tmp, tmp_rem);
 		end
 	end
 	
@@ -438,7 +439,7 @@ if cfg.spectrum
 	cfg_tmp.overlap				= 0;  % with this overlap
 	tmp_nrem					= ft_redefinetrial(cfg_tmp, tmp_nrem);
 	if rem
-		tmp_rem						= ft_redefinetrial(cfg_tmp, tmp_rem);
+		tmp_rem					= ft_redefinetrial(cfg_tmp, tmp_rem);
 	end
 	
 	ft_warning off % makes the output unreadable otherwise (will be turned on again below)
@@ -533,7 +534,8 @@ if cfg.spi
 	cfg_pp.bpfiltord	= cfg.spi_filt_ord;
 	data_spi			= ft_preprocessing(cfg_pp, data);
 	
-	spi_amp				= abs(hilbert(data_spi.trial{1}'))'; % needs to be transposed for hilbert, then transposed back...
+	spi_raw				= data_spi.trial{1};
+	spi_amp				= abs(hilbert(spi_raw'))'; % needs to be transposed for hilbert, then transposed back...
 	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
@@ -561,7 +563,6 @@ if cfg.spi
 		for iCh = 1:numel(chans)
 			if cfg.verbose
 				disp(['****** Working on channel: ' num2str(iCh)])
-% 				tic
 			end
 			
 			% First threshold criterion
@@ -570,14 +571,14 @@ if cfg.spi
 			above_threshold = FastSpiAmplitudeTmp > thr(1, iCh); % long column showing threshold crossings
 
 			isLongEnough = bwareafilt(above_threshold, [cfg.spi_dur_min(1)*Fs, cfg.spi_dur_max(1)*Fs]); % find spindle within duration range
-			isLongEnough = [0; isLongEnough]; %compensate that spindle might start in the beginning
+			isLongEnough = [0; isLongEnough]; % compensate that spindle might start in the beginning
 			SpiBeginning =  strfind(isLongEnough',[0 1]); %find spindle Beginning line before compensates that it find last 0
 			SpiEnd = strfind(isLongEnough',[1 0])-1; %find spindle Ending subtract 1 because of added 0 in the beginning
 			
 			% Some plots for debugging
 			if cfg.debugging
 				win = 1:50000;
-				spi_raw = data_spi.trial{1}(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+				spi_raw = spi_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
 				plot(win/Fs, spi_raw(1,win)), hold on			% raw signal
 				plot(win/Fs, spi_amp_tmp(iCh,win), 'r')			% envelope
 				plot(win/Fs, FastSpiAmplitudeTmp(win), 'r')		% smoothed envelope
@@ -609,7 +610,7 @@ if cfg.spi
 				end
 				window_size = 5 * Fs; % in sec
 				if CurrentSpindles(2,iSpi)+window_size < data_spi.sampleinfo(2) %delete Spi to close to recording end
-					DataTmpSpi = data_spi.trial{1}(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filtered spindle signal for each spindle + - 5sec
+					DataTmpSpi = spi_raw(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filtered spindle signal for each spindle + - 5sec
 					FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
 		
 					% Second threshold criterion
@@ -845,7 +846,8 @@ if cfg.rip
 	cfg_pp.bpfiltord	= cfg.rip_filt_ord;
 	data_rip			= ft_preprocessing(cfg_pp, data);
 	
-	rip_amp				= abs(hilbert(data_rip.trial{1}'))'; % needs to be transposed for hilbert, then transposed back...
+	rip_raw				= data_rip.trial{1};
+	rip_amp				= abs(hilbert(rip_raw'))'; % needs to be transposed for hilbert, then transposed back...
 	rip_amp_mean		= mean(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
@@ -866,7 +868,7 @@ if cfg.rip
 			% Some plots for debugging
 			if cfg.debugging
 				win = 1:50000;
-				rip_raw = data_rip.trial{1}(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
+				rip_raw = rip_raw(iCh, NREMEpisodes(1,iEpoch)*Fs : NREMEpisodes(2,iEpoch)*Fs);
 				plot(win/Fs, rip_raw(1,win)), hold on			% raw signal
 				plot(win/Fs, rip_amp_tmp(iCh,win), 'r')			% envelope
 				plot(win/Fs, RipAmplitudeTmp(win), 'r')		% smoothed envelope
@@ -894,7 +896,7 @@ if cfg.rip
 			for irip = 1: size (CurrentRipples,2)
 				window_size = 0.5 * Fs; % in sec
 				if  CurrentRipples(2,irip)+window_size < data_rip.sampleinfo(2) %check for distance to recording end
-					DataTmprip = data_rip.trial{1}(iCh, CurrentRipples(1,irip)-window_size : CurrentRipples(2,irip)+window_size); %get filteres ripple signal for eachripple + - 5sec
+					DataTmprip = rip_raw(iCh, CurrentRipples(1,irip)-window_size : CurrentRipples(2,irip)+window_size); %get filteres ripple signal for eachripple + - 5sec
 					RipAmplitudeTmp = smooth(abs(hilbert(DataTmprip')),0.004*Fs);%get smoothed instantaneous amplitude
 					
 					% Second Peak threshold criterion
@@ -955,7 +957,7 @@ if cfg.rip
     if cfg.spi
 		SpiRipDetCoupling{iCh,1}	= [];
         cnt							= 1;
-        SpiPhase = rad2deg(angle(hilbert(data_spi.trial{1}(iCh,:)'))); % Spi phase along entire data length
+        SpiPhase = rad2deg(angle(hilbert(rip_raw(iCh,:)'))); % Spi phase along entire data length
         for iSpi = 1:size(output.spi.events{iCh,1},2)
             Rip_cur = [];
             % If there is a Ripndle fully inside Spi plus minus time
