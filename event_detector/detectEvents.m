@@ -127,6 +127,7 @@ if length(data.trial) ~= 1, error('Function only accepts single-trial data.'), e
 if any(size(data.sampleinfo) ~= [1 2]), error('Sampleinfo looks like data does not contain exactly one trial.'), end
 if size(cfg.scoring, 1) == 1, cfg.scoring = cfg.scoring'; end
 if size(data.label, 1) == 1, data.label = data.label'; end
+if mod(data.fsample,1) ~= 0, error('Non-integer sampling rate detected (data.fsample). Seems fishy..'), end
 Fs			= data.fsample;
 data_raw	= data.trial{1};
 
