@@ -378,7 +378,7 @@ if cfg.spectrum
 	if any(scoring_fine(1,1)==cfg.code_NREM,2) % in case recording starts with this stage
 		nrem_begs = [1 nrem_begs];
 	end
-	if any(scoring_fine(end,1)==cfg.code_NREM,2) % in case recording starts with this stage
+	if any(scoring_fine(end,1)==cfg.code_NREM,2) % in case recording ends with this stage
 		nrem_ends = [nrem_ends length(scoring_fine)];
 	end
 	
@@ -390,7 +390,7 @@ if cfg.spectrum
 		if any(scoring_fine(1,1)==cfg.code_REM,2) % in case recording starts with this stage
 			rem_begs = [1 rem_begs];
 		end
-		if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording starts with this stage
+		if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording ends with this stage
 			rem_ends = [rem_ends length(scoring_fine)];
 		end
 	else
