@@ -37,7 +37,8 @@ function output = detectEvents(cfg, data)
 % 								b) for the lazy user, artifact definitions as returned by fieldtrip artifact functions, e.g.
 % 								cfg.artfctdef.visual.artifact =	[234 242; 52342 65234];
 %								cfg.artfctdef.zvalue.artifact =	[111 222]; ...and so on.
-%								Data in these artifactual time windows will not be used. Artifacts may be overlapping.
+%								Data in artifactual time windows will be excluded from almost all analyses. In detail, the spectrum will be computed only on clean data. For event detection, the mean/SD wil be computed on clean data. Events will then be detected on all data in the correct sleep stage but those events overlapping with artifacts will be discarded. Artifacts may be overlapping.
+%								An exception are the returned NREM and REM episode durations, which are calculated on the raw hypnogram. Also spindle densities are calculated based on these uncorrected durations.
 % .artfctpad					int; padding (in sec) of segments to discard before and after to discard (default: 0.5)
 % .spectrum						logical; turns estimation of power spectrum on (1) or off (0); default: 0
 %								This returns, separately for artifact-free NREM and REM stages, the commonly used raw spectrum (or 'mixed spectrum', mix), as well as the IRASA-computed fractal component (fra), oscillatory component (osc), and their ratio (rel = osc/fra).
@@ -372,7 +373,7 @@ if cfg.spectrum
 	disp('Calculating spectrum...')
 	spec_freq = [1 45]; % let's not ask the user (to make sure the spindle range is included in this range)
 	
-	% NREM episodes in sample resolution
+	% NREM episodes in sample resolution and without artifacts
 	nrem_begs = strfind(any(scoring_fine==cfg.code_NREM,2)',[0 1]); % where does scoring flip to NREM
 	nrem_ends = strfind(any(scoring_fine==cfg.code_NREM,2)',[1 0]); % where does scoring flip from NREM to something else
 	nrem_begs = nrem_begs+1; % because it always finds the sample before
@@ -383,7 +384,7 @@ if cfg.spectrum
 		nrem_ends = [nrem_ends length(scoring_fine)];
 	end
 	
-	% REM episodes in sample resolution
+	% REM episodes in sample resolution and without artifacts
 	if rem
 		rem_begs = strfind(any(scoring_fine==cfg.code_REM,2)',[0 1]); % where does scoring flip to NREM
 		rem_ends = strfind(any(scoring_fine==cfg.code_REM,2)',[1 0]); % where does scoring flip from NREM to something else
@@ -529,7 +530,7 @@ if cfg.spi
 	
 	spi_raw				= data_spi.trial{1};
 	spi_amp				= abs(hilbert(spi_raw'))'; % needs to be transposed for hilbert, then transposed back...
-	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
+	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))'); % computed on data without artifacts!
 	spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
 	% Determine threshold(s)
