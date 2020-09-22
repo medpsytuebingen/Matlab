@@ -282,6 +282,7 @@ if tmp_diff < 0 % this should not happen or only be -1
 	warning(wng)
 elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS)
 	data_raw(:, end-(tmp_diff-1):end)	= [];
+    data.trial{1}(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
 	data.sampleinfo(2) = data.sampleinfo(2) - tmp_diff;
 end
