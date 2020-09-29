@@ -284,6 +284,7 @@ if tmp_diff < 0 % this should not happen or only be -1
 	warning(wng)
 elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS)
 	data_raw(:, end-(tmp_diff-1):end)	= [];
+    data.trial{1}(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
 	data.sampleinfo(2) = data.sampleinfo(2) - tmp_diff;
 end
@@ -390,7 +391,7 @@ if cfg.spectrum
 	if any(scoring_fine(1,1)==cfg.code_NREM,2) % in case recording starts with this stage
 		nrem_begs = [1 nrem_begs];
 	end
-	if any(scoring_fine(end,1)==cfg.code_NREM,2) % in case recording starts with this stage
+	if any(scoring_fine(end,1)==cfg.code_NREM,2) % in case recording ends with this stage
 		nrem_ends = [nrem_ends length(scoring_fine)];
 	end
 	
@@ -402,7 +403,7 @@ if cfg.spectrum
 		if any(scoring_fine(1,1)==cfg.code_REM,2) % in case recording starts with this stage
 			rem_begs = [1 rem_begs];
 		end
-		if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording starts with this stage
+		if any(scoring_fine(end,1)==cfg.code_REM,2) % in case recording ends with this stage
 			rem_ends = [rem_ends length(scoring_fine)];
 		end
 	else
