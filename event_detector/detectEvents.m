@@ -27,7 +27,7 @@ function output = detectEvents(cfg, data)
 %								Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
 % cfg
 % .name							string (optional); dataset identifier, will be forwarded to output.info 
-% .scoring						int array (num_epochs x 1)
+% .scoring						int array (num_epochs x 1); can also have a second column that is 1 for a movement artifact (this entire epoch will then be excluded from analysis)
 % .scoring_epoch_length			int; length of scoring epochs in sec
 % .code_NREM					int or int array; NREM sleep stages to use for detection (usually [2 3 4] for humans, 2 for animals)
 % .code_REM						same for REM sleep
@@ -126,7 +126,7 @@ end
 % Check data
 if length(data.trial) ~= 1, error('Function only accepts single-trial data.'), end
 if any(size(data.sampleinfo) ~= [1 2]), error('Sampleinfo looks like data does not contain exactly one trial.'), end
-if size(cfg.scoring, 1) == 1, cfg.scoring = cfg.scoring'; end
+if size(cfg.scoring, 1) == 1 || size(cfg.scoring, 1) == 2, cfg.scoring = cfg.scoring'; end
 if size(data.label, 1) == 1, data.label = data.label'; end
 if mod(data.fsample,1) ~= 0, error('Non-integer sampling rate detected (data.fsample). Seems fishy..'), end
 Fs			= data.fsample;
@@ -291,8 +291,14 @@ clear tmp_diff
 
 % Create upsampled scoring vector
 scoring_fine	= zeros(size(data_raw,2),1);
+if size(cfg.scoring, 2) == 2
+	scoring_ma		= zeros(size(data_raw,2),1); % also note down movement artifacts if present
+end
 for iEp = 1:length(cfg.scoring)
-	scoring_fine((iEp-1)*multi+1 : (iEp)*multi) = cfg.scoring(iEp);
+	scoring_fine((iEp-1)*multi+1 : (iEp)*multi) = cfg.scoring(iEp,1);
+	if size(cfg.scoring, 2) == 2
+		scoring_ma((iEp-1)*multi+1 : (iEp)*multi)	= cfg.scoring(iEp,2);
+	end
 end
 output.info.scoring_fine	= scoring_fine; % Let's return the scoring without artifacts
 
@@ -313,15 +319,19 @@ if isfield(cfg, 'artfctdef')
 		if a_end > length(scoring_fine) % shouldnt be too long also after padding
 			a_end = length(scoring_fine);
 		end
-		scoring_fine(a_beg:a_end) = 99;
+		scoring_fine(a_beg:a_end) = 99; % 99 = code for artifact
 	end
-	output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts removed
 end
+% Mark movement artifacts as artifacts
+if size(cfg.scoring, 2) == 2
+	scoring_fine(scoring_ma) = 99; % 99 = code for artifact
+end
+output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts removed
 
 % Extract episodes (save in seconds)
 % NREM
-NREMBegEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[0 1]); % where does scoring flip to NREM
-NREMEndEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[1 0]); % where does scoring flip from NREM to something else
+NREMBegEpisode = strfind(any(cfg.scoring(:,1)==cfg.code_NREM,2)',[0 1]); % where does scoring flip to NREM
+NREMEndEpisode = strfind(any(cfg.scoring(:,1)==cfg.code_NREM,2)',[1 0]); % where does scoring flip from NREM to something else
 NREMBegEpisode = NREMBegEpisode+1; % because it always finds the epoch before
 if any(cfg.scoring(1,1)==cfg.code_NREM,2)
 	NREMBegEpisode = [1 NREMBegEpisode];
@@ -333,8 +343,8 @@ NREMEpisodes = [(NREMBegEpisode-1)*cfg.scoring_epoch_length+1; NREMEndEpisode*cf
 
 % REM
 if ~isempty(cfg.code_REM)
-	REMBegEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[0 1]);
-	REMEndEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[1 0]);
+	REMBegEpisode = strfind(any(cfg.scoring(:,1)==cfg.code_REM,2)',[0 1]);
+	REMEndEpisode = strfind(any(cfg.scoring(:,1)==cfg.code_REM,2)',[1 0]);
 	REMBegEpisode = REMBegEpisode+1;
 	if any(cfg.scoring(1,1)==cfg.code_REM,2)
 		REMBegEpisode = [1 REMBegEpisode];
@@ -348,8 +358,8 @@ else
 end
 
 % Wake
-WAKBegEpisode = strfind((cfg.scoring==cfg.code_WAKE)',[0 1]);
-WAKEndEpisode = strfind((cfg.scoring==cfg.code_WAKE)',[1 0]);
+WAKBegEpisode = strfind((cfg.scoring(:,1)==cfg.code_WAKE)',[0 1]);
+WAKEndEpisode = strfind((cfg.scoring(:,1)==cfg.code_WAKE)',[1 0]);
 WAKBegEpisode = WAKBegEpisode+1;
 if cfg.scoring(1,1) == cfg.code_WAKE
 	WAKBegEpisode = [1 WAKBegEpisode];
