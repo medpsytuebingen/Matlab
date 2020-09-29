@@ -303,6 +303,7 @@ for iEp = 1:length(cfg.scoring)
 	end
 end
 output.info.scoring_fine	= scoring_fine; % Let's return the scoring without artifacts
+scoring_ma					= scoring_ma ~= 0; % in case anything other than 1 was used to denote artifacts
 
 % Mark artifacts in sleep scoring
 if isfield(cfg, 'artfctdef')
