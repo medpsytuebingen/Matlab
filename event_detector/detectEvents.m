@@ -126,11 +126,11 @@ end
 % Check data
 if length(data.trial) ~= 1, error('Function only accepts single-trial data.'), end
 if any(size(data.sampleinfo) ~= [1 2]), error('Sampleinfo looks like data does not contain exactly one trial.'), end
+if size(data.trial{1},2) ~= data.sampleinfo(2), error('Sampleinfo does not match data length.'), end
 if size(cfg.scoring, 1) == 1 || size(cfg.scoring, 1) == 2, cfg.scoring = cfg.scoring'; end
 if size(data.label, 1) == 1, data.label = data.label'; end
 if mod(data.fsample,1) ~= 0, error('Non-integer sampling rate detected (data.fsample). Seems fishy..'), end
 Fs			= data.fsample;
-data_raw	= data.trial{1};
 
 % Set default values - general
 if ~isfield(cfg, 'debugging') % undocumented debugging option
@@ -252,7 +252,6 @@ end
 output						= [];
 output.info.cfg				= cfg;
 output.info.Fs				= Fs;
-output.info.length			= size(data_raw,2);
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
 output.info.name			= cfg.name;
@@ -277,18 +276,20 @@ if isfield(cfg, 'artfctdef')
 end
 
 % Compensate if scoring and data don't have the same length
-tmp_diff					= output.info.length - length(cfg.scoring)*multi;
+tmp_diff					= data.sampleinfo(2) - length(cfg.scoring)*multi;
 if tmp_diff < 0 % this should not happen or only be -1
 	wng = ['Data is shorter than scoring by ' num2str(tmp_diff * -1) ' sample(s). Will act as if I hadn''t seen this.'];
 	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
 	warning(wng)
 elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS)
-	data_raw(:, end-(tmp_diff-1):end)	= [];
     data.trial{1}(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
 	data.sampleinfo(2) = data.sampleinfo(2) - tmp_diff;
 end
 clear tmp_diff
+
+% Extract data to speed up subsequent queries
+data_raw	= data.trial{1};
 
 % Create upsampled scoring vector
 scoring_fine	= zeros(size(data_raw,2),1);
@@ -374,6 +375,7 @@ if isempty(REMEpisodes), rem = 0; else, rem = 1; end % in case there is no REM s
 
 % Fill the output
 output.info.channel			= chans;
+output.info.length			= size(data_raw,2); % after potential cutting
 output.NREMepisode			= NREMEpisodes;
 output.REMepisode			= REMEpisodes;
 output.WAKEpisodes			= WAKEpisodes;
