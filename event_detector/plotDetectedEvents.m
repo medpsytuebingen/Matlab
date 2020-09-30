@@ -167,13 +167,15 @@ handlevector = [temphandle handlevector];
 
 % Plot slow oscillations and spindles
 if slo
-    for iCh = 1:num_chans
-        temphandle      = plot(det_slo{iCh}/Fs/60, lineHeight_hyp - 0.1*iCh, 'ko'); hold on
-        if iCh == num_chans
-            handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
-        end
-        clear temphandle
-    end
+	for iCh = 1:num_chans
+		if ~isempty(det_slo{iCh})
+			temphandle      = plot(det_slo{iCh}/Fs/60, lineHeight_hyp - 0.1*iCh, 'ko'); hold on
+			if iCh == num_chans
+				handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
+			end
+			clear temphandle
+		end
+	end
 end
 if spi
 	for iCh = 1:num_chans

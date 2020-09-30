@@ -27,7 +27,7 @@ function output = detectEvents(cfg, data)
 %								Should adhere to https://github.com/fieldtrip/fieldtrip/blob/release/utilities/ft_datatype_raw.m
 % cfg
 % .name							string (optional); dataset identifier, will be forwarded to output.info 
-% .scoring						int array (num_epochs x 1)
+% .scoring						int array (num_epochs x 1); can also have a second column that is 1 for a movement artifact (this entire epoch will then be excluded from analysis)
 % .scoring_epoch_length			int; length of scoring epochs in sec
 % .code_NREM					int or int array; NREM sleep stages to use for detection (usually [2 3 4] for humans, 2 for animals)
 % .code_REM						same for REM sleep
@@ -37,7 +37,8 @@ function output = detectEvents(cfg, data)
 % 								b) for the lazy user, artifact definitions as returned by fieldtrip artifact functions, e.g.
 % 								cfg.artfctdef.visual.artifact =	[234 242; 52342 65234];
 %								cfg.artfctdef.zvalue.artifact =	[111 222]; ...and so on.
-%								Data in these artifactual time windows will not be used. Artifacts may be overlapping.
+%								Data in artifactual time windows will be excluded from almost all analyses. In detail, the spectrum will be computed only on clean data. For event detection, the mean/SD wil be computed on clean data. Events will then be detected on all data in the correct sleep stage but those events overlapping with artifacts will be discarded. Artifacts may be overlapping.
+%								An exception are the returned NREM and REM episode durations, which are calculated on the raw hypnogram. Also spindle densities are calculated based on these uncorrected durations.
 % .artfctpad					int; padding (in sec) of segments to discard before and after to discard (default: 0.5)
 % .spectrum						logical; turns estimation of power spectrum on (1) or off (0); default: 0
 %								This returns, separately for artifact-free NREM and REM stages, the commonly used raw spectrum (or 'mixed spectrum', mix), as well as the IRASA-computed fractal component (fra), oscillatory component (osc), and their ratio (rel = osc/fra).
@@ -125,10 +126,11 @@ end
 % Check data
 if length(data.trial) ~= 1, error('Function only accepts single-trial data.'), end
 if any(size(data.sampleinfo) ~= [1 2]), error('Sampleinfo looks like data does not contain exactly one trial.'), end
-if size(cfg.scoring, 1) == 1, cfg.scoring = cfg.scoring'; end
+if size(data.trial{1},2) ~= data.sampleinfo(2), error('Sampleinfo does not match data length.'), end
+if size(cfg.scoring, 1) == 1 || size(cfg.scoring, 1) == 2, cfg.scoring = cfg.scoring'; end
 if size(data.label, 1) == 1, data.label = data.label'; end
+if mod(data.fsample,1) ~= 0, error('Non-integer sampling rate detected (data.fsample). Seems fishy..'), end
 Fs			= data.fsample;
-data_raw	= data.trial{1};
 
 % Set default values - general
 if ~isfield(cfg, 'debugging') % undocumented debugging option
@@ -250,7 +252,6 @@ end
 output						= [];
 output.info.cfg				= cfg;
 output.info.Fs				= Fs;
-output.info.length			= size(data_raw,2);
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
 output.info.name			= cfg.name;
@@ -275,25 +276,36 @@ if isfield(cfg, 'artfctdef')
 end
 
 % Compensate if scoring and data don't have the same length
-tmp_diff					= output.info.length - length(cfg.scoring)*multi;
+tmp_diff					= data.sampleinfo(2) - length(cfg.scoring)*multi;
 if tmp_diff < 0 % this should not happen or only be -1
 	wng = ['Data is shorter than scoring by ' num2str(tmp_diff * -1) ' sample(s). Will act as if I hadn''t seen this.'];
 	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
 	warning(wng)
 elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS)
-	data_raw(:, end-(tmp_diff-1):end)	= [];
     data.trial{1}(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
 	data.sampleinfo(2) = data.sampleinfo(2) - tmp_diff;
 end
 clear tmp_diff
 
+% Extract data to speed up subsequent queries
+data_raw	= data.trial{1};
+
 % Create upsampled scoring vector
 scoring_fine	= zeros(size(data_raw,2),1);
+if size(cfg.scoring, 2) == 2
+	scoring_ma		= zeros(size(data_raw,2),1); % also note down movement artifacts if present
+end
 for iEp = 1:length(cfg.scoring)
-	scoring_fine((iEp-1)*multi+1 : (iEp)*multi) = cfg.scoring(iEp);
+	scoring_fine((iEp-1)*multi+1 : (iEp)*multi) = cfg.scoring(iEp,1);
+	if size(cfg.scoring, 2) == 2
+		scoring_ma((iEp-1)*multi+1 : (iEp)*multi)	= cfg.scoring(iEp,2);
+	end
 end
 output.info.scoring_fine	= scoring_fine; % Let's return the scoring without artifacts
+if size(cfg.scoring, 2) == 2
+	scoring_ma					= scoring_ma ~= 0; % in case anything other than 1 was used to denote artifacts
+end
 
 % Mark artifacts in sleep scoring
 if isfield(cfg, 'artfctdef')
@@ -312,15 +324,19 @@ if isfield(cfg, 'artfctdef')
 		if a_end > length(scoring_fine) % shouldnt be too long also after padding
 			a_end = length(scoring_fine);
 		end
-		scoring_fine(a_beg:a_end) = 99;
+		scoring_fine(a_beg:a_end) = 99; % 99 = code for artifact
 	end
-	output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts removed
 end
+% Mark movement artifacts as artifacts
+if size(cfg.scoring, 2) == 2
+	scoring_fine(scoring_ma) = 99; % 99 = code for artifact
+end
+output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts removed
 
 % Extract episodes (save in seconds)
 % NREM
-NREMBegEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[0 1]); % where does scoring flip to NREM
-NREMEndEpisode = strfind(any(cfg.scoring==cfg.code_NREM,2)',[1 0]); % where does scoring flip from NREM to something else
+NREMBegEpisode = strfind(any(cfg.scoring(:,1)==cfg.code_NREM,2)',[0 1]); % where does scoring flip to NREM
+NREMEndEpisode = strfind(any(cfg.scoring(:,1)==cfg.code_NREM,2)',[1 0]); % where does scoring flip from NREM to something else
 NREMBegEpisode = NREMBegEpisode+1; % because it always finds the epoch before
 if any(cfg.scoring(1,1)==cfg.code_NREM,2)
 	NREMBegEpisode = [1 NREMBegEpisode];
@@ -332,8 +348,8 @@ NREMEpisodes = [(NREMBegEpisode-1)*cfg.scoring_epoch_length+1; NREMEndEpisode*cf
 
 % REM
 if ~isempty(cfg.code_REM)
-	REMBegEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[0 1]);
-	REMEndEpisode = strfind(any(cfg.scoring==cfg.code_REM,2)',[1 0]);
+	REMBegEpisode = strfind(any(cfg.scoring(:,1)==cfg.code_REM,2)',[0 1]);
+	REMEndEpisode = strfind(any(cfg.scoring(:,1)==cfg.code_REM,2)',[1 0]);
 	REMBegEpisode = REMBegEpisode+1;
 	if any(cfg.scoring(1,1)==cfg.code_REM,2)
 		REMBegEpisode = [1 REMBegEpisode];
@@ -347,8 +363,8 @@ else
 end
 
 % Wake
-WAKBegEpisode = strfind((cfg.scoring==cfg.code_WAKE)',[0 1]);
-WAKEndEpisode = strfind((cfg.scoring==cfg.code_WAKE)',[1 0]);
+WAKBegEpisode = strfind((cfg.scoring(:,1)==cfg.code_WAKE)',[0 1]);
+WAKEndEpisode = strfind((cfg.scoring(:,1)==cfg.code_WAKE)',[1 0]);
 WAKBegEpisode = WAKBegEpisode+1;
 if cfg.scoring(1,1) == cfg.code_WAKE
 	WAKBegEpisode = [1 WAKBegEpisode];
@@ -362,6 +378,7 @@ if isempty(REMEpisodes), rem = 0; else, rem = 1; end % in case there is no REM s
 
 % Fill the output
 output.info.channel			= chans;
+output.info.length			= size(data_raw,2); % after potential cutting
 output.NREMepisode			= NREMEpisodes;
 output.REMepisode			= REMEpisodes;
 output.WAKEpisodes			= WAKEpisodes;
@@ -372,7 +389,7 @@ if cfg.spectrum
 	disp('Calculating spectrum...')
 	spec_freq = [1 45]; % let's not ask the user (to make sure the spindle range is included in this range)
 	
-	% NREM episodes in sample resolution
+	% NREM episodes in sample resolution and without artifacts
 	nrem_begs = strfind(any(scoring_fine==cfg.code_NREM,2)',[0 1]); % where does scoring flip to NREM
 	nrem_ends = strfind(any(scoring_fine==cfg.code_NREM,2)',[1 0]); % where does scoring flip from NREM to something else
 	nrem_begs = nrem_begs+1; % because it always finds the sample before
@@ -383,7 +400,7 @@ if cfg.spectrum
 		nrem_ends = [nrem_ends length(scoring_fine)];
 	end
 	
-	% REM episodes in sample resolution
+	% REM episodes in sample resolution and without artifacts
 	if rem
 		rem_begs = strfind(any(scoring_fine==cfg.code_REM,2)',[0 1]); % where does scoring flip to NREM
 		rem_ends = strfind(any(scoring_fine==cfg.code_REM,2)',[1 0]); % where does scoring flip from NREM to something else
@@ -503,6 +520,7 @@ end
 %% Spindles
 if cfg.spi
 	disp('Starting spindle detection...')
+	num_rej = 0; % Collecting the number of rejections
 	
 	% Find individual spindle peaks
 	if cfg.spi_indiv
@@ -529,7 +547,7 @@ if cfg.spi
 	
 	spi_raw				= data_spi.trial{1};
 	spi_amp				= abs(hilbert(spi_raw'))'; % needs to be transposed for hilbert, then transposed back...
-	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
+	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))'); % computed on data without artifacts!
 	spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
 	% Determine threshold(s)
@@ -628,10 +646,12 @@ if cfg.spi
 					TempIdx = [TempIdx iSpi];
 				end
 			end
+			num_rej = num_rej + numel(TempIdx);
 			spi{iEp,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
 		end
 	end
-	
+	disp(['Spindle detection done. ' num2str(num_rej) ' spindles (around ' num2str(round(num_rej/numel(chans))) ' per channel) were rejected because they overlapped with artifacts.'])
+
 	% Calculate spindle density
 	output.spi.density = zeros(numel(chans),1);
 	for iCh = 1:numel(chans)
@@ -665,7 +685,8 @@ end
 %% SOs
 if cfg.slo
 	disp('Starting slow oscillation/slow wave detection...')
-	
+	num_rej = 0; % Collecting the number of rejections
+
 	cfg_pp				= [];
 	cfg_pp.bpfilter		= 'yes';
 	cfg_pp.bpfreq		= cfg.slo_freq;
@@ -731,10 +752,10 @@ if cfg.slo
                     end
                 end
             else
-                TmpIndex = [TmpIndex iEvent];
+                TmpIndex = [TmpIndex iEvent]; % gather SOs to close to the recording end
             end
         end
-        SOEpisodes{iCh,1}(:,TmpIndex) = []; %delete SOEpisodes to close to rec end
+        SOEpisodes{iCh,1}(:,TmpIndex) = []; % delete SOEpisodes to close to rec end
 		
 		% Delete those events where not all crossings could have been found
 		ZeroCrossings{iCh,1}(:,find(ZeroCrossings{iCh,1}(1,:)==0))=[];
@@ -780,6 +801,7 @@ if cfg.slo
 		for iSO = 1:size(ZeroCrossings{iCh,1},2)
 			TmpIndex = [TmpIndex find(any(scoring_fine(ZeroCrossings{iCh,1}(1,iSO):ZeroCrossings{iCh,1}(3,iSO)) == 99))];
 		end
+		num_rej = num_rej + numel(TmpIndex);
 		
         NegativePeaks{iCh,1}(TmpIndex,:) = [];
         ZeroCrossings{iCh,1}(:,TmpIndex) = [];
@@ -787,8 +809,8 @@ if cfg.slo
         SOGA{iCh,1}(TmpIndex,:)          = [];
         for iSO = 1:size(NegativePeaks{iCh,1},1)
             SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
-        end
-		
+		end
+				
 		% SO-spindle coupling
 		if cfg.spi && size(output.spi.events{iCh},2) > 0 % if there are spindles in this channel
 			% Method 1: Extract SO phase at point of peak amplitude in spindle
@@ -828,6 +850,8 @@ if cfg.slo
 			end
 		end
 	end
+	
+	disp(['SO detection done. ' num2str(num_rej) ' SOs (around ' num2str(round(num_rej/numel(chans))) ' per channel) were rejected because they overlapped with artifacts.'])
 	
 	% add to output
 	output.slo.events				= ZeroCrossings; % up-down, down-up, up-down crossings
