@@ -639,15 +639,17 @@ if cfg.spi
 					% Check whether the two criteria above are fulfilled 
 					% + no peak-to-peak distance is more than 125ms
 					% + the event does not overlap with an artifact
-					if ~any(isLongEnough) || ~any(MaxIsThere) || max(diff(locs)) > 0.125 * Fs || any(scoring_fine(CurrentSpindles(1,iSpi):CurrentSpindles(2,iSpi)) == 99)
+					if ~any(isLongEnough) || ~any(MaxIsThere) || max(diff(locs)) > 0.125 * Fs
 						TempIdx = [TempIdx iSpi];
+					elseif any(scoring_fine(CurrentSpindles(1,iSpi):CurrentSpindles(2,iSpi)) == 99)
+						TempIdx = [TempIdx iSpi];
+						num_rej = num_rej + 1;
 					end
 				else
 					TempIdx = [TempIdx iSpi];
 				end
-			end
-			num_rej = num_rej + numel(TempIdx);
-			spi{iEp,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
+			end	
+			spi{iEp,iCh}(:,TempIdx) = [];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
 		end
 	end
 	disp(['Spindle detection done. ' num2str(num_rej) ' spindles (around ' num2str(round(num_rej/numel(chans))) ' per channel) were rejected because they overlapped with artifacts.'])
