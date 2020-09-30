@@ -303,7 +303,9 @@ for iEp = 1:length(cfg.scoring)
 	end
 end
 output.info.scoring_fine	= scoring_fine; % Let's return the scoring without artifacts
-scoring_ma					= scoring_ma ~= 0; % in case anything other than 1 was used to denote artifacts
+if size(cfg.scoring, 2) == 2
+	scoring_ma					= scoring_ma ~= 0; % in case anything other than 1 was used to denote artifacts
+end
 
 % Mark artifacts in sleep scoring
 if isfield(cfg, 'artfctdef')
@@ -518,6 +520,7 @@ end
 %% Spindles
 if cfg.spi
 	disp('Starting spindle detection...')
+	num_rej = 0; % Collecting the number of rejections
 	
 	% Find individual spindle peaks
 	if cfg.spi_indiv
@@ -643,10 +646,12 @@ if cfg.spi
 					TempIdx = [TempIdx iSpi];
 				end
 			end
+			num_rej = num_rej + numel(TempIdx);
 			spi{iEp,iCh}(:,TempIdx)=[];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
 		end
 	end
-	
+	disp(['Spindle detection done. ' num2str(num_rej) ' spindles (around ' num2str(round(num_rej/numel(chans))) ' per channel) were rejected because they overlapped with artifacts.'])
+
 	% Calculate spindle density
 	output.spi.density = zeros(numel(chans),1);
 	for iCh = 1:numel(chans)
@@ -680,7 +685,8 @@ end
 %% SOs
 if cfg.slo
 	disp('Starting slow oscillation/slow wave detection...')
-	
+	num_rej = 0; % Collecting the number of rejections
+
 	cfg_pp				= [];
 	cfg_pp.bpfilter		= 'yes';
 	cfg_pp.bpfreq		= cfg.slo_freq;
@@ -746,10 +752,10 @@ if cfg.slo
                     end
                 end
             else
-                TmpIndex = [TmpIndex iEvent];
+                TmpIndex = [TmpIndex iEvent]; % gather SOs to close to the recording end
             end
         end
-        SOEpisodes{iCh,1}(:,TmpIndex) = []; %delete SOEpisodes to close to rec end
+        SOEpisodes{iCh,1}(:,TmpIndex) = []; % delete SOEpisodes to close to rec end
 		
 		% Delete those events where not all crossings could have been found
 		ZeroCrossings{iCh,1}(:,find(ZeroCrossings{iCh,1}(1,:)==0))=[];
@@ -795,6 +801,7 @@ if cfg.slo
 		for iSO = 1:size(ZeroCrossings{iCh,1},2)
 			TmpIndex = [TmpIndex find(any(scoring_fine(ZeroCrossings{iCh,1}(1,iSO):ZeroCrossings{iCh,1}(3,iSO)) == 99))];
 		end
+		num_rej = num_rej + numel(TmpIndex);
 		
         NegativePeaks{iCh,1}(TmpIndex,:) = [];
         ZeroCrossings{iCh,1}(:,TmpIndex) = [];
@@ -802,8 +809,8 @@ if cfg.slo
         SOGA{iCh,1}(TmpIndex,:)          = [];
         for iSO = 1:size(NegativePeaks{iCh,1},1)
             SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
-        end
-		
+		end
+				
 		% SO-spindle coupling
 		if cfg.spi && size(output.spi.events{iCh},2) > 0 % if there are spindles in this channel
 			% Method 1: Extract SO phase at point of peak amplitude in spindle
@@ -843,6 +850,8 @@ if cfg.slo
 			end
 		end
 	end
+	
+	disp(['SO detection done. ' num2str(num_rej) ' SOs (around ' num2str(round(num_rej/numel(chans))) ' per channel) were rejected because they overlapped with artifacts.'])
 	
 	% add to output
 	output.slo.events				= ZeroCrossings; % up-down, down-up, up-down crossings
