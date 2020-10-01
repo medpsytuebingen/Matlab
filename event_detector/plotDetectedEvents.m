@@ -1,27 +1,44 @@
-function plotDetectedEvents(output, path_plot)
+function plotDetectedEvents(output, path_plot, channels)
 % Plots a summary of the results returned by detectEvents. This includes
 % the power spectrum, sleep scoring, length of data, detected slow waves
 % and spindles, their phase coupling etc., depending on what is present in
 % the data.
 %
 % Note: This was mainly tested using 4 channels. Placing several plots on
-% top of each other is tricky, so every help is needed to make this more
-% robust for other numnbers of channels.
+% top of each other is tricky, so every help is appreciated to make this
+% more robust for other numnbers of channels.
 %
 % INPUT VARIABLES:
 % output						Output of detectEvents
-% path_plot						String; full path for saving the plot
+% path_plot						string; full path for saving the plot
 %								(e.g., 'C:\onepath\file.png')
+% channels						cell array of strings; subset of channels to plot
 %
 % OUTPUT VARIABLES:
 % -
-%
-% TO DO: 
 %
 % AUTHOR:
 % Jens Klinzing, klinzing@princeton.edu
 
 %% INITIALIZATION AND SETTINGS
+% Which channels to plot
+if nargin == 2 % in case the second argument are channels
+	if iscell(path_plot)
+		channels	= path_plot;
+		path_plot	= [];
+	else
+		channels	= output.info.channels;
+	end
+end
+channels = unique(channels, 'stable');
+chan_idx = []; % index of desired channels in output data
+for iCh = 1:numel(channels)
+	chan_idx = [chan_idx, find(strcmp(channels{iCh},  output.info.channel))];
+end
+num_chans			= numel(channels);
+if num_chans > 6, warning('Not sure if that many channels will plot well.'), end
+
+% Which types of events to plot
 Fs							= output.info.Fs;			% sample rate of the artifact definition
 if isfield(output, 'slo')
     slo						= 1;
@@ -33,9 +50,9 @@ if isfield(output, 'spi')
     spi						= 1;
     det_spi					= output.spi.events;
     % Find center of each spindle
-    for iCh = 1:numel(det_spi)
-		if ~isempty(det_spi{iCh})
-			det_spi{iCh} = det_spi{iCh}(1,:) + (det_spi{iCh}(2,:) - det_spi{iCh}(1,:))/2;
+    for iCh = 1:numel(chan_idx)
+		if ~isempty(det_spi{chan_idx(iCh)})
+			det_spi{chan_idx(iCh)} = det_spi{chan_idx(iCh)}(1,:) + (det_spi{chan_idx(iCh)}(2,:) - det_spi{chan_idx(iCh)}(1,:))/2;
 		end
     end
 else
@@ -46,8 +63,8 @@ if isfield(output, 'rip')
     det_rip					= output.rip.events;
     % Find center of each ripple
     for iCh = 1:numel(det_rip)
-        if ~isempty(det_rip{iCh})
-            det_rip{iCh} = det_rip{iCh}(1,:) + (det_rip{iCh}(2,:) - det_rip{iCh}(1,:))/2;
+        if ~isempty(det_rip{chan_idx(iCh)})
+            det_rip{chan_idx(iCh)} = det_rip{chan_idx(iCh)}(1,:) + (det_rip{chan_idx(iCh)}(2,:) - det_rip{chan_idx(iCh)}(1,:))/2;
         end
     end
 else
@@ -58,12 +75,9 @@ if isfield(output, 'spectrum')
 else
     spectrum				= 0;
 end
-chans						= output.info.channel;
-num_chans					= numel(chans);
-if isfield(output, 'slo') && isfield(output, 'spi') && (numel(det_spi) ~= numel(det_slo) || numel(det_spi) ~= num_chans)
-    error('Number of channels is not the same in all event types or doesnt match channel number promised by event detection structure.')
+if isfield(output, 'slo') && isfield(output, 'spi') && (numel(det_spi) ~= numel(det_slo))
+    error('Number of channels is not the same in all event types.')
 end
-if num_chans > 6, warning('Not sure if that many channels will plot well.'), end
 
 % Load hypnogram
 hypnogram                   = output.info.scoring;
@@ -168,8 +182,8 @@ handlevector = [temphandle handlevector];
 % Plot slow oscillations and spindles
 if slo
 	for iCh = 1:num_chans
-		if ~isempty(det_slo{iCh})
-			temphandle      = plot(det_slo{iCh}/Fs/60, lineHeight_hyp - 0.1*iCh, 'ko'); hold on
+		if ~isempty(det_slo{chan_idx(iCh)})
+			temphandle      = plot(det_slo{chan_idx(iCh)}/Fs/60, lineHeight_hyp - 0.1*iCh, 'ko'); hold on
 			if iCh == num_chans
 				handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
 			end
@@ -179,8 +193,8 @@ if slo
 end
 if spi
 	for iCh = 1:num_chans
-		if ~isempty(det_spi{iCh})
-			temphandle      = plot(det_spi{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.02, 'ro'); hold on
+		if ~isempty(det_spi{chan_idx(iCh)})
+			temphandle      = plot(det_spi{chan_idx(iCh)}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.02, 'ro'); hold on
 			if iCh == num_chans
 				handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
 			end
@@ -190,8 +204,8 @@ if spi
 end
 if rip
     for iCh = 1:num_chans
-        if ~isempty(det_rip{iCh})
-            temphandle      = plot(det_rip{iCh}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.04, 'go'); hold on
+        if ~isempty(det_rip{chan_idx(iCh)})
+            temphandle      = plot(det_rip{chan_idx(iCh)}/Fs/60, lineHeight_hyp - (0.1*iCh)-0.04, 'go'); hold on
             if iCh == num_chans
                 handlevector(end+1) = temphandle(1); % each event is a separate plot, only want one legend entry
             end
@@ -205,7 +219,7 @@ xlabel('Time (in min)')
 xlim([0 inf])
 set(gca,'YTick', [])
 set(gca,'YTickLabel', [])
-ylabel('Channels (in the order provided)');
+ylabel('Channels');
 if slo && spi && rip
     leg_str = {'SOs', 'Spindles', 'Ripples'};
 elseif slo && spi
@@ -228,21 +242,21 @@ if slo
     alpha					= .4;
     line_width				= 1.5;
     err_metric				= 'std';
-    win_width				= floor(size(output.slo.waveform{iCh}(1,:),2)/2); % in samples
+    win_width				= floor(size(output.slo.waveform{1}(1,:),2)/2); % in samples
     for iCh = 1:num_chans
         p = subplot(num_chans*num_pnl,num_col,splts_r([(iCh-1)*2+1 (iCh-1)*2+2]));
-        y_mean = mean(output.slo.waveform{iCh},1);
-        y_std = std(output.slo.waveform{iCh},0,1);
+        y_mean = mean(output.slo.waveform{chan_idx(iCh)},1);
+        y_std = std(output.slo.waveform{chan_idx(iCh)},0,1);
         switch(err_metric)
             case 'std', err = y_std;
-            case 'sem', err = (y_std./sqrt(size(output.slo.waveform{iCh},1)));
+            case 'sem', err = (y_std./sqrt(size(output.slo.waveform{chan_idx(iCh)},1)));
             case 'var', err = (y_std.^2);
-            case 'c95', err = (y_std./sqrt(size(output.slo.waveform{iCh},1))).*1.96;
+            case 'c95', err = (y_std./sqrt(size(output.slo.waveform{chan_idx(iCh)},1))).*1.96;
         end
         x_axis = (-win_width:win_width)/Fs; % in seconds
         x_vector = [x_axis, fliplr(x_axis)];
         yyaxis right
-        if size(output.slo.waveform{iCh}, 2) > 1
+        if size(output.slo.waveform{chan_idx(iCh)}, 2) > 1
             patch = fill(x_vector, [y_mean+err,fliplr(y_mean-err)], color_area);
             set(patch, 'edgecolor', 'none');
             set(patch, 'FaceAlpha', alpha);
@@ -250,7 +264,7 @@ if slo
         end
         plot(x_axis, y_mean, 'color', color_line, 'LineWidth', line_width, 'LineStyle', '-', 'Color', 'black');
         xlim([x_axis(1) x_axis(end)])
-        ylabel(output.info.channel{iCh}, 'Interpreter', 'none', 'Color', 'black');
+        ylabel(channels{iCh}, 'Interpreter', 'none', 'Color', 'black');
         ax = gca;
         ax.YAxis(1).Visible = 0; % hide left unused axis
         ax.YAxis(2).Color = 'k'; % turn right axis black
@@ -259,50 +273,51 @@ if slo
         
 		if spi
             % Draw spindles into SO plot
-            for iEv = 1:size(output.spi.events{iCh},2)
-                spi_center = round(output.spi.events{iCh}(1,iEv) + (output.spi.events{iCh}(2,iEv)-output.spi.events{iCh}(1,iEv))/2);
-                spi_cooc = find(spi_center > output.slo.neg_peaks{iCh}-win_width & spi_center < output.slo.neg_peaks{iCh}+win_width);
+            for iEv = 1:size(output.spi.events{chan_idx(iCh)},2)
+                spi_center = round(output.spi.events{chan_idx(iCh)}(1,iEv) + (output.spi.events{chan_idx(iCh)}(2,iEv)-output.spi.events{chan_idx(iCh)}(1,iEv))/2);
+                spi_cooc = find(spi_center > output.slo.neg_peaks{chan_idx(iCh)}-win_width & spi_center < output.slo.neg_peaks{chan_idx(iCh)}+win_width);
                 % in case there is at least one co-occurrence, mark the one closest to the downpeak in SO plot
                 if ~isempty(spi_cooc)
-                    spi_time = (spi_center - output.slo.neg_peaks{iCh}(spi_cooc)) / Fs;
+                    spi_time = (spi_center - output.slo.neg_peaks{chan_idx(iCh)}(spi_cooc)) / Fs;
                     spi_time = spi_time(nearest(spi_time, 0)); % choose only the one closest to 0
                     plot(spi_time, spi_y, 'ko', 'MarkerSize', 5, 'MarkerEdgeColor', 'red') % -50 is in microvolt, this could be chosen better
                 end
             end
             
             % Add polar histograms for Spi amplitude peaks, Spi detections, Rip detections
+			ypos = p.Position(2)+p.Position(4)*.5-(p.Position(3)*.18)/2; % y position of line plot (bottom margin) plus half its height (=its y center) minus half the height of the polarplot = centers the plots
             if isfield(output, 'SloSpiAmpCoupling')
-                axes('pos',[p.Position(1)-.01 p.Position(2)+p.Position(4)*.1 p.Position(3)*.18 p.Position(3)*.18]) % left, bottom, width, height
-                pol = polarhistogram(deg2rad(output.SloSpiAmpCoupling{iCh}));
+                axes('pos',[p.Position(1)-.01 ypos p.Position(3)*.18 p.Position(3)*.18]) % left, bottom, width, height
+                pol = polarhistogram(deg2rad(output.SloSpiAmpCoupling{chan_idx(iCh)}));
                 pol.Parent.ThetaAxis.Visible = 'off';
                 pol.Parent.RAxis.Visible = 'off';
 				pol.FaceColor = [.2 .2 .2];
 				if iCh == 1
 					title(sprintf(['SO Phase spindle band amp peak']),  'FontSize', 8)
 				end
-				annotation(p.Parent, 'textbox', [p.Position(1)-0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['SO\nn=' num2str(numel(output.SloSpiAmpCoupling{iCh}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'black')
+				annotation(p.Parent, 'textbox', [p.Position(1)-0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['SO\nn=' num2str(numel(output.SloSpiAmpCoupling{chan_idx(iCh)}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'black')
 			end
             if isfield(output, 'SloSpiDetCoupling')
-                axes('pos',[p.Position(1)+0.025 p.Position(2)+p.Position(4)*.1 p.Position(3)*.18 p.Position(3)*.18]) % left (first argument) had +p.Position(3)*.7
-                pol = polarhistogram(deg2rad(output.SloSpiDetCoupling{iCh}));
+                axes('pos',[p.Position(1)+0.025 ypos p.Position(3)*.18 p.Position(3)*.18]) % left (first argument) had +p.Position(3)*.7
+                pol = polarhistogram(deg2rad(output.SloSpiDetCoupling{chan_idx(iCh)}));
                 pol.Parent.ThetaAxis.Visible = 'off';
                 pol.Parent.RAxis.Visible = 'off';
 				pol.FaceColor = 'red';
 				if iCh == 1
 					title({'SO Phase detected spindle peak', ' '},  'FontSize', 8, 'Color', 'red')
 				end
-				annotation(p.Parent, 'textbox', [p.Position(1)-0.03, p.Position(2), 0.03, p.Position(4)/2], 'String', sprintf(['Spi\nn=' num2str(numel(output.SloSpiDetCoupling{iCh}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'red')
+				annotation(p.Parent, 'textbox', [p.Position(1)-0.03, p.Position(2), 0.03, p.Position(4)/2], 'String', sprintf(['Spi\nn=' num2str(numel(output.SloSpiDetCoupling{chan_idx(iCh)}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'red')
             end
             if isfield(output, 'SpiRipDetCoupling')
-                axes('pos',[p.Position(1)+p.Position(3)*.81 p.Position(2)+p.Position(4)*.1 p.Position(3)*.18 p.Position(3)*.18]) % left (first argument) had +p.Position(3)*.7
-                pol = polarhistogram(deg2rad(output.SpiRipDetCoupling{iCh}));
+                axes('pos',[p.Position(1)+p.Position(3)*.81 ypos p.Position(3)*.18 p.Position(3)*.18]) % left (first argument) had +p.Position(3)*.7
+                pol = polarhistogram(deg2rad(output.SpiRipDetCoupling{chan_idx(iCh)}));
                 pol.Parent.ThetaAxis.Visible = 'off';
                 pol.Parent.RAxis.Visible = 'off';
                 pol.FaceColor = [0.4940 0.1840 0.5560];
 				if iCh == 1
 					title(sprintf(['Spi Phase detected ripple peak']),  'FontSize', 8, 'Color', [0.4940 0.1840 0.5560])
 				end
-				annotation(p.Parent, 'textbox', [p.Position(1)+p.Position(3)+0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['Rip\nn=' num2str(numel(output.SpiRipDetCoupling{iCh}))]),  'FontSize', 7,'EdgeColor','none', 'Color', [0.4940 0.1840 0.5560])
+				annotation(p.Parent, 'textbox', [p.Position(1)+p.Position(3)+0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['Rip\nn=' num2str(numel(output.SpiRipDetCoupling{chan_idx(iCh)}))]),  'FontSize', 7,'EdgeColor','none', 'Color', [0.4940 0.1840 0.5560])
             end
 		end
     end
@@ -313,17 +328,17 @@ drawnow
 if spectrum
 	pnl			= 2; % first panel
 	splts		= (pnl-1)*(num_chans*num_col)+1:num_chans*num_col*pnl; % this subplot business is getting confusing, are there better ways to flexibly manage subplots?	
-	splts_l = splts(logical(mod(ceil((1:length(splts)) / (num_col/2)), 2)));
-	splts_r = splts(~logical(mod(ceil((1:length(splts)) / (num_col/2)), 2)));
+	splts_l		= splts(logical(mod(ceil((1:length(splts)) / (num_col/2)), 2)));
+	splts_r		= splts(~logical(mod(ceil((1:length(splts)) / (num_col/2)), 2)));
 	
 	% Left: NREM
 	if isfield(output.spectrum, 'rel_nrem')
 		s1 = subplot(num_chans*num_pnl,num_col,splts_l);
-		plot(output.spectrum.freq, output.spectrum.rel_nrem, '-', 'LineWidth', 2)
-		ylim([-1 max(max(output.spectrum.rel_nrem(:, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
+		plot(output.spectrum.freq, output.spectrum.rel_nrem(chan_idx,:), '-', 'LineWidth', 2)
+		ylim([-1 max(max(output.spectrum.rel_nrem(chan_idx, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
 		ylabel('Oscillatory relative to fractal component')
 		title(sprintf('\n Spectrum NREM sleep'))
-		legend(output.info.channel{:})
+		legend(channels{:})
 		xlim([1 35]) % thats where the really interesting stuff happens
 		s1.Position = [s1.Position(1) s1.Position(2)-.04 s1.Position(3) s1.Position(4)]; % shift subplot a bit down to prevent overlaps
 	end
@@ -331,10 +346,10 @@ if spectrum
 	% Right: REM
 	if isfield(output.spectrum, 'rel_rem')
 		s2 = subplot(num_chans*pnl,num_col,splts_r);
-		plot(output.spectrum.freq, output.spectrum.rel_rem, '-', 'LineWidth', 2)
-		ylim([-1 max(max(output.spectrum.rel_rem(:, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
+		plot(output.spectrum.freq, output.spectrum.rel_rem(chan_idx,:), '-', 'LineWidth', 2)
+		ylim([-1 max(max(output.spectrum.rel_rem(chan_idx, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
 		ylabel('Oscillatory relative to fractal component')
-		legend(output.info.channel{:})
+		legend(channels{:})
 		xlim([1 35]) % thats where the really interesting stuff happens
 		title(sprintf('\n Spectrum REM sleep'))
 		s2.Position = [s2.Position(1) s2.Position(2)-.04 s1.Position(3) s2.Position(4)];  % shift subplot a bit down to prevent overlaps
