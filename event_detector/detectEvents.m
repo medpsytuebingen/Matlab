@@ -43,6 +43,7 @@ function output = detectEvents(cfg, data)
 % .spectrum						logical; turns estimation of power spectrum on (1) or off (0); default: 0
 %								This returns, separately for artifact-free NREM and REM stages, the commonly used raw spectrum (or 'mixed spectrum', mix), as well as the IRASA-computed fractal component (fra), oscillatory component (osc), and their ratio (rel = osc/fra).
 %								Note that if spi_indiv = 1, the spectrum is always returned since it has to be calculated for peak detection anyways
+% .invertdata					logical; flips data upside down (useful for intracranial data); default: 0
 %
 % Parameters SO/slow wave detection:
 % .slo							logical; turns slow oscillation/slow wave detection on (1) or off (0); default: 0
@@ -141,6 +142,9 @@ if ~isfield(cfg, 'verbose') % undocumented debugging option
 end
 if isfield(cfg, 'artfctdef') && ~isfield(cfg, 'artfctpad')
 	cfg.artfctpad = 0.5;
+end
+if ~isfield(cfg, 'invertdata') % undocumented inversion option (for intracranial data)
+	cfg.invertdata				= 0; 
 end
 
 % Set default values - spectrum
@@ -290,6 +294,9 @@ clear tmp_diff
 
 % Extract data to speed up subsequent queries
 data_raw	= data.trial{1};
+if cfg.invertdata
+	data_raw = data_raw .* -1;
+end
 
 % Create upsampled scoring vector
 scoring_fine	= zeros(size(data_raw,2),1);
