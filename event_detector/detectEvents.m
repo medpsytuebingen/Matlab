@@ -105,7 +105,6 @@ function output = detectEvents(cfg, data)
 %
 %
 % Todo:
-% . Allow switch of polarity in a subset of channels (EEG vs. invasive)
 % . Rework output: All data in one row per channel, also per ep and for
 % entire recording
 % . Do merging of close events / check again for length?
@@ -259,6 +258,7 @@ output.info.Fs				= Fs;
 output.info.scoring			= cfg.scoring;
 output.info.scoring_epoch_length = cfg.scoring_epoch_length;
 output.info.name			= cfg.name;
+output.info.inverted		= cfg.invertdata;
 output.info.warnings		= {};
 wng_cnt						= 0;
 
