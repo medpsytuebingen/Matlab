@@ -22,12 +22,14 @@ function plotDetectedEvents(output, path_plot, channels)
 
 %% INITIALIZATION AND SETTINGS
 % Which channels to plot
-if nargin == 2 % in case the second argument are channels
-	if iscell(path_plot)
+if nargin == 1
+	channels	= output.info.channel;
+elseif nargin == 2
+	if iscell(path_plot) % in case the second argument are channels
 		channels	= path_plot;
 		path_plot	= [];
 	else
-		channels	= output.info.channels;
+		channels	= output.info.channel;
 	end
 end
 channels = unique(channels, 'stable');
