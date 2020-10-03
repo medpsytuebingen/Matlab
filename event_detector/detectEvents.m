@@ -631,8 +631,9 @@ if cfg.spi
 				% it right away, otherwise check all other criteria
 				window_size = 5 * Fs; % in sec
 				if CurrentSpindles(2,iSpi)+window_size < data_spi.sampleinfo(2) %delete Spi to close to recording end
-					DataTmpSpi = spi_raw(iCh, CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size); %get filtered spindle signal for each spindle + - 5sec
-					FastSpiAmplitudeTmp = smooth(abs(hilbert(DataTmpSpi)),40);%get smoothed instantaneous amplitude
+					spi_win = CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size;
+					DataTmpSpi = spi_raw(iCh, spi_win); % get filtered spindle signal for each spindle + - 5sec
+					FastSpiAmplitudeTmp = smooth(spi_amp(iCh, spi_win),40);% get smoothed instantaneous amplitude
 		
 					% Second threshold criterion
 					above_threshold = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(2, iCh);
@@ -641,12 +642,12 @@ if cfg.spi
 					% Third threshold criterion
 					above_Max = FastSpiAmplitudeTmp(window_size:end-window_size) > thr(3, iCh);
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.spi_dur_max(1)*Fs]); %find spindle within duration range
-					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', thr(1, iCh));
-
+					
 					% Check whether the two criteria above are fulfilled 
 					% + no peak-to-peak distance is more than 125ms
 					% + the event does not overlap with an artifact
-					if ~any(isLongEnough) || ~any(MaxIsThere) || max(diff(locs)) > 0.125 * Fs
+					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', thr(1, iCh));
+					if ~any(isLongEnough) || ~any(MaxIsThere) || (numel(locs) > 1 && max(diff(locs)) > 0.125 * Fs)
 						TempIdx = [TempIdx iSpi];
 					elseif any(scoring_fine(CurrentSpindles(1,iSpi):CurrentSpindles(2,iSpi)) == 99)
 						TempIdx = [TempIdx iSpi];
