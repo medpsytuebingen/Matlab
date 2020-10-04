@@ -297,7 +297,7 @@ if slo
 				if iCh == 1
 					title(sprintf(['SO Phase spindle band amp peak']),  'FontSize', 8)
 				end
-				annotation(p.Parent, 'textbox', [p.Position(1)-0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['SO\nn=' num2str(numel(output.SloSpiAmpCoupling{chan_idx(iCh)}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'black')
+				annotation(p.Parent, 'textbox', [p.Position(1)-0.035, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['SO:\n' num2str(numel(output.SloSpiAmpCoupling{chan_idx(iCh)}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'black')
 			end
             if isfield(output, 'SloSpiDetCoupling')
                 axes('pos',[p.Position(1)+0.025 ypos p.Position(3)*.18 p.Position(3)*.18]) % left (first argument) had +p.Position(3)*.7
@@ -308,7 +308,7 @@ if slo
 				if iCh == 1
 					title({'SO Phase detected spindle peak', ' '},  'FontSize', 8, 'Color', 'red')
 				end
-				annotation(p.Parent, 'textbox', [p.Position(1)-0.03, p.Position(2), 0.03, p.Position(4)/2], 'String', sprintf(['Spi\nn=' num2str(numel(output.SloSpiDetCoupling{chan_idx(iCh)}))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'red')
+				annotation(p.Parent, 'textbox', [p.Position(1)-0.035, p.Position(2), 0.03, p.Position(4)/2], 'String', sprintf(['Spi:\n' num2str(numel(output.SloSpiDetCoupling{chan_idx(iCh)})) '/' num2str(size(output.spi.events{iCh},2))]),  'FontSize', 7,'EdgeColor','none', 'Color', 'red')
             end
             if isfield(output, 'SpiRipDetCoupling')
                 axes('pos',[p.Position(1)+p.Position(3)*.81 ypos p.Position(3)*.18 p.Position(3)*.18]) % left (first argument) had +p.Position(3)*.7
@@ -319,7 +319,7 @@ if slo
 				if iCh == 1
 					title(sprintf(['Spi Phase detected ripple peak']),  'FontSize', 8, 'Color', [0.4940 0.1840 0.5560])
 				end
-				annotation(p.Parent, 'textbox', [p.Position(1)+p.Position(3)+0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['Rip\nn=' num2str(numel(output.SpiRipDetCoupling{chan_idx(iCh)}))]),  'FontSize', 7,'EdgeColor','none', 'Color', [0.4940 0.1840 0.5560])
+				annotation(p.Parent, 'textbox', [p.Position(1)+p.Position(3)+0.03, p.Position(2), 0.03, p.Position(4)], 'String', sprintf(['Rip:\n' num2str(numel(output.SpiRipDetCoupling{chan_idx(iCh)})) '/' num2str(size(output.rip.events{iCh},2))]),  'FontSize', 7,'EdgeColor','none', 'Color', [0.4940 0.1840 0.5560])
             end
 		end
     end
@@ -343,6 +343,10 @@ if spectrum
 		legend(channels{:})
 		xlim([1 35]) % thats where the really interesting stuff happens
 		s1.Position = [s1.Position(1) s1.Position(2)-.04 s1.Position(3) s1.Position(4)]; % shift subplot a bit down to prevent overlaps
+		if isfield(output, 'spi') && isfield(output.spi, 'freq')
+			xline(output.spi.freq(1), '--');
+			xline(output.spi.freq(2), '--');
+		end
 	end
 	
 	% Right: REM
@@ -355,6 +359,10 @@ if spectrum
 		xlim([1 35]) % thats where the really interesting stuff happens
 		title(sprintf('\n Spectrum REM sleep'))
 		s2.Position = [s2.Position(1) s2.Position(2)-.04 s1.Position(3) s2.Position(4)];  % shift subplot a bit down to prevent overlaps
+		if isfield(output, 'the') && isfield(output.the, 'freq')
+			xline(output.the.freq(1), '--');
+			xline(output.the.freq(2), '--');
+		end
 	end
 end
 

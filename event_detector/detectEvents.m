@@ -821,7 +821,7 @@ if cfg.slo
             SOGA{iCh,1}(iSO,:)		= slo_raw(iCh, NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs):NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
 		end
 				
-		% SO-spindle coupling
+		%% SO-spindle coupling
 		if cfg.spi && size(output.spi.events{iCh},2) > 0 % if there are spindles in this channel
 			% Method 1: Extract SO phase at point of peak amplitude in spindle
 			% band (Randolph method) - might fluctuate much and might require
