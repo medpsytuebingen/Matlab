@@ -346,7 +346,9 @@ if spectrum
 		if isfield(output, 'spi') && isfield(output.spi, 'freq')
 			xline(output.spi.freq(1), '--');
 			xline(output.spi.freq(2), '--');
+			legend(s1.Children(3:end))
 		end
+		legend('boxoff')
 	end
 	
 	% Right: REM
@@ -355,14 +357,16 @@ if spectrum
 		plot(output.spectrum.freq, output.spectrum.rel_rem(chan_idx,:), '-', 'LineWidth', 2)
 		ylim([-1 max(max(output.spectrum.rel_rem(chan_idx, output.spectrum.freq > 2 & output.spectrum.freq < 30))) * 2])
 		ylabel('Oscillatory relative to fractal component')
-		legend(channels{:})
+		legend(channels{:}, 'boxoff')
 		xlim([1 35]) % thats where the really interesting stuff happens
 		title(sprintf('\n Spectrum REM sleep'))
 		s2.Position = [s2.Position(1) s2.Position(2)-.04 s1.Position(3) s2.Position(4)];  % shift subplot a bit down to prevent overlaps
 		if isfield(output, 'the') && isfield(output.the, 'freq')
 			xline(output.the.freq(1), '--');
 			xline(output.the.freq(2), '--');
+			legend(s2.Children(3:end))
 		end
+		legend('boxoff')
 	end
 end
 
