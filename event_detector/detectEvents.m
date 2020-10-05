@@ -292,16 +292,18 @@ elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS
 end
 clear tmp_diff
 
-% Extract data to speed up subsequent queries
-data_raw	= data.trial{1};
+% Note down length of data (after potential cutting above)
+output.info.length			= size(data.trial{1},2);
+
+% Invert if requested
 if cfg.invertdata
-	data_raw = data_raw .* -1;
+	data.trial{1}	= data.trial{1} .* -1;
 end
 
 % Create upsampled scoring vector
-scoring_fine	= zeros(size(data_raw,2),1);
+scoring_fine	= zeros(output.info.length,1);
 if size(cfg.scoring, 2) == 2
-	scoring_ma		= zeros(size(data_raw,2),1); % also note down movement artifacts if present
+	scoring_ma		= zeros(output.info.length,1); % also note down movement artifacts if present
 end
 for iEp = 1:length(cfg.scoring)
 	scoring_fine((iEp-1)*multi+1 : (iEp)*multi) = cfg.scoring(iEp,1);
@@ -385,7 +387,6 @@ if isempty(REMEpisodes), rem = 0; else, rem = 1; end % in case there is no REM s
 
 % Fill the output
 output.info.channel			= chans;
-output.info.length			= size(data_raw,2); % after potential cutting
 output.NREMepisode			= NREMEpisodes;
 output.REMepisode			= REMEpisodes;
 output.WAKEpisodes			= WAKEpisodes;
