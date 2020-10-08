@@ -32,13 +32,16 @@ function output = detectEvents(cfg, data)
 % .code_NREM					int or int array; NREM sleep stages to use for detection (usually [2 3 4] for humans, 2 for animals)
 % .code_REM						same for REM sleep
 % .code_WAKE					same for wake
-% .artfctdef					artifacts, either
-%								a) as an array (num_arts x 2), each row providing [startsample endsample] of one artifact window, or
-% 								b) for the lazy user, artifact definitions as returned by fieldtrip artifact functions, e.g.
-% 								cfg.artfctdef.visual.artifact =	[234 242; 52342 65234];
-%								cfg.artfctdef.zvalue.artifact =	[111 222]; ...and so on.
-%								Data in artifactual time windows will be excluded from almost all analyses. In detail, the spectrum will be computed only on clean data. For event detection, the mean/SD wil be computed on clean data. Events will then be detected on all data in the correct sleep stage but those events overlapping with artifacts will be discarded. Artifacts may be overlapping.
-%								An exception are the returned NREM and REM episode durations, which are calculated on the raw hypnogram. Also spindle densities are calculated based on these uncorrected durations.
+% .artfctdef					artifacts, either one definition for all channels or separately for each channel in the following ways:
+%								1) as one array (num_arts x 2), each row providing [startsample endsample] of one artifact window; will be used for all channels
+% 								2) for the lazy user, artifact definitions as returned by fieldtrip artifact functions, e.g.
+% 								   cfg.artfctdef.visual.artifact =	[234 242; 52342 65234];
+%								   cfg.artfctdef.zvalue.artifact =	[111 222]; 
+%								   ...and so on; all artifacts will be used on all channels
+%								3) as a cell array (1 x num_channels) with each cell containing artifact definitions as described in 1).
+%								Detected events overlapping with an artifact will be discarded. 
+%								However, thresholds for detection, the spectrum, and NREM/REM durations will be computed on the raw hypnogram/data including artifactual time windows. 
+%								For total exclusions, mark artifactual epochs as movement artifacts in the sleep scoring (see cfg.scoring)
 % .artfctpad					int; padding (in sec) of segments to discard before and after to discard (default: 0.5)
 % .spectrum						logical; turns estimation of power spectrum on (1) or off (0); default: 0
 %								This returns, separately for artifact-free NREM and REM stages, the commonly used raw spectrum (or 'mixed spectrum', mix), as well as the IRASA-computed fractal component (fra), oscillatory component (osc), and their ratio (rel = osc/fra).
@@ -266,19 +269,6 @@ wng_cnt						= 0;
 chans						= data.label;
 multi						= cfg.scoring_epoch_length*Fs;
 
-% Extract artifact time windows in case they are provided in fieldtrip
-% format
-if isfield(cfg, 'artfctdef')
-	if isstruct(cfg.artfctdef)
-		art_types = fieldnames(cfg.artfctdef);
-		tmp = [];
-		for iAt = 1:numel(art_types)
-			tmp = [tmp; cfg.artfctdef.(art_types{iAt}).artifact];
-		end
-		cfg.artfctdef = tmp;
-	end
-end
-
 % Compensate if scoring and data don't have the same length
 tmp_diff					= data.sampleinfo(2) - length(cfg.scoring)*multi;
 if tmp_diff < 0 % this should not happen or only be -1
@@ -300,10 +290,10 @@ if cfg.invertdata
 	data.trial{1}	= data.trial{1} .* -1;
 end
 
-% Create upsampled scoring vector
-scoring_fine	= zeros(output.info.length,1);
+% Create upsampled scoring vector, mark movement artifacts
+scoring_fine	= int8(zeros(output.info.length,1));
 if size(cfg.scoring, 2) == 2
-	scoring_ma		= zeros(output.info.length,1); % also note down movement artifacts if present
+	scoring_ma		= int8(zeros(output.info.length,1)); % also note down movement artifacts if present
 end
 for iEp = 1:length(cfg.scoring)
 	scoring_fine((iEp-1)*multi+1 : (iEp)*multi) = cfg.scoring(iEp,1);
@@ -315,32 +305,59 @@ output.info.scoring_fine	= scoring_fine; % Let's return the scoring without arti
 if size(cfg.scoring, 2) == 2
 	scoring_ma					= scoring_ma ~= 0; % in case anything other than 1 was used to denote artifacts
 end
-
-% Mark artifacts in sleep scoring
-if isfield(cfg, 'artfctdef')
-	wng = ['Artifact handling is new and should be double-checked.'];
-	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
-	warning(wng)
-	for iArt = 1:size(cfg.artfctdef, 1)
-		a_beg = cfg.artfctdef(iArt, 1) -  cfg.artfctpad*Fs;
-		if a_beg < 1 % padding shouldnt go to far
-			a_beg = 1;
-		end
-		if cfg.artfctdef(iArt, 2) > length(scoring_fine)
-			error(['Artifact ' num2str(iArt) ' extends outside the data.'])
-		end
-		a_end = cfg.artfctdef(iArt, 2) +  cfg.artfctpad*Fs;
-		if a_end > length(scoring_fine) % shouldnt be too long also after padding
-			a_end = length(scoring_fine);
-		end
-		scoring_fine(a_beg:a_end) = 99; % 99 = code for artifact
-	end
-end
-% Mark movement artifacts as artifacts
 if size(cfg.scoring, 2) == 2
 	scoring_fine(scoring_ma) = 99; % 99 = code for artifact
 end
-output.info.scoring_artsrem	= scoring_fine; % also return scoring with artifacts removed
+
+% Deal with different forms of artifact definitions
+if isfield(cfg, 'artfctdef')
+	wng = ['Artifact handling has recently be revamped and should be double-checked.'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng;
+	warning(wng)
+	if isstruct(cfg.artfctdef) % if arts are provided as one fieldtrip style definition: repack repeat it for number of channels
+		art_types = fieldnames(cfg.artfctdef);
+		tmp = [];
+		for iAt = 1:numel(art_types)
+			tmp = [tmp; cfg.artfctdef.(art_types{iAt}).artifact];
+		end
+		cfg.artfctdef		= cell(1, numel(chans));
+		cfg.artfctdef(:)	= deal({tmp});
+	elseif iscell(cfg.artfctdef) % if its a cell...
+		% ... but only one definition, repeat it for number of channels
+		if numel(cfg.artfctdef) == 1
+			tmp					= cfg.artfctdef;
+			cfg.artfctdef		= cell(1, numel(chans));
+			cfg.artfctdef(:)	= deal(tmp);
+		elseif numel(cfg.artfctdef) ~= numel(chans)
+			error('If cfg.artfctdef is a cell array it should contain one cell per channel.')
+		end % otherwise there is nothing to do
+	else % if arts are provided as one n x 2 matrix: repeat it for number of channels
+		tmp					= cfg.artfctdef;
+		cfg.artfctdef		= cell(1, numel(chans));
+		cfg.artfctdef(:)	= deal({tmp});
+	end
+else
+	cfg.artfctdef		= cell(1, numel(chans));
+	cfg.artfctdef(:)	= deal({[]});
+end
+
+% Pad artifacts
+for iCh = 1:numel(chans)
+	for iArt = 1:size(cfg.artfctdef{iCh}, 1)
+		if cfg.artfctdef{iCh}(iArt, 1) < 1 || cfg.artfctdef{iCh}(iArt, 2) > length(scoring_fine)
+			error(['Artifact ' num2str(iArt) ' extends outside the data.'])
+		end
+		a_beg = cfg.artfctdef{iCh}(iArt, 1) -  cfg.artfctpad*Fs;
+		if a_beg < 1 % padding shouldnt go too far
+			a_beg = 1;
+		end
+		a_end = cfg.artfctdef{iCh}(iArt, 2) +  cfg.artfctpad*Fs;
+		if a_end > length(scoring_fine) % shouldnt be too long also after padding
+			a_end = length(scoring_fine);
+		end
+		cfg.artfctdef{iCh}(iArt, :) = [a_beg a_end];
+	end
+end
 
 % Extract episodes (save in seconds)
 % NREM
@@ -650,7 +667,7 @@ if cfg.spi
 					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', thr(1, iCh));
 					if ~any(isLongEnough) || ~any(MaxIsThere) || (numel(locs) > 1 && max(diff(locs)) > 0.125 * Fs)
 						TempIdx = [TempIdx iSpi];
-					elseif any(scoring_fine(CurrentSpindles(1,iSpi):CurrentSpindles(2,iSpi)) == 99)
+					elseif isArt([CurrentSpindles(1,iSpi),CurrentSpindles(2,iSpi)], cfg.artfctdef{iCh})
 						TempIdx = [TempIdx iSpi];
 						num_rej = num_rej + 1;
 					end
@@ -658,7 +675,7 @@ if cfg.spi
 					TempIdx = [TempIdx iSpi];
 				end
 			end	
-			spi{iEp,iCh}(:,TempIdx) = [];%if one or more of the criteria are not fulfilled, delete detected spindle candidate
+			spi{iEp,iCh}(:,TempIdx) = []; % if one or more of the criteria are not fulfilled, delete detected spindle candidate
 		end
 	end
 	disp(['Spindle detection done. ' num2str(num_rej) ' spindles (around ' num2str(round(num_rej/numel(chans))) ' per channel) were rejected because they overlapped with artifacts.'])
@@ -690,7 +707,6 @@ if cfg.spi
     else
         clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
 	end
-
 end
 
 %% SOs
@@ -807,10 +823,12 @@ if cfg.slo
         TmpIndex = find(NegativePeaks{iCh,1}(:,1)+round(twindow*Fs) > length(slo_raw));%delete Event that is to close to recording end
         
 		% Check for overlaps with artifacts (has to be done that late
-		% because only now do we know the full extent of the SO (with up
+		% because only now do we know the full length of the SO (with up
 		% state)
 		for iSO = 1:size(ZeroCrossings{iCh,1},2)
-			TmpIndex = [TmpIndex find(any(scoring_fine(ZeroCrossings{iCh,1}(1,iSO):ZeroCrossings{iCh,1}(3,iSO)) == 99))];
+			if isArt([ZeroCrossings{iCh,1}(1,iSO), ZeroCrossings{iCh,1}(3,iSO)], cfg.artfctdef{iCh})
+				TmpIndex = [TmpIndex iSO];
+			end
 		end
 		num_rej = num_rej + numel(TmpIndex);
 		
@@ -942,7 +960,7 @@ if cfg.rip
 					% Second Peak threshold criterion
 					above_Max = RipAmplitudeTmp(window_size:end-window_size) > cfg.rip_thr(2)*rip_amp_std(iCh);
 					MaxIsThere = bwareafilt(above_Max, [1, cfg.rip_dur_max(1)*Fs]); %find ripple within duration range
-					if ~any(MaxIsThere) || any(scoring_fine(CurrentRipples(1,irip):CurrentRipples(2,irip)) == 99)
+					if ~any(MaxIsThere) || isArt([CurrentRipples(1,irip), CurrentRipples(2,irip)], cfg.artfctdef{iCh})
                         TempIdx = [TempIdx irip];
                     end
                     if isfield(cfg,'rip_control_Chan')
@@ -1063,11 +1081,26 @@ if isfield(cfg, 'gen') && ~isempty(cfg.gen)
 		end
 		output.(event_types{iEt}) = generic_detector(cfg.gen.(event_types{iEt}), data);
 	end
+	wng = ['Generic event detection requested. No artifact rejection done on those events!!'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng;
+	warning(wng)
 end
 
 if wng_cnt > 0
 	warning(['Dataset has been processed successfully but ' num2str(wng_cnt) ' warning(s) was thrown. You can find them at output.info.warning.'])
 end
+end
+
+%% Local functions
+function art = isArt(evt, arts)
+% Checks for a provided event window ([beg end]) whether it overlap with
+% any of n provided artifact windows (n x 2).
+if length(evt) ~= 2 || size(arts, 2) ~= 2
+	error('Incorrect input format.')
+end
+
+% Is there an artifact where the artifact end if after the event start sample  is before th
+art = any(arrayfun(@(x) arts(x, 2) >= evt(1) && arts(x, 1) <= evt(end), 1:size(arts,1)));
 end
 
 %% Local functions for generic event detection
