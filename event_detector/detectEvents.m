@@ -860,19 +860,28 @@ if cfg.slo
 			SloSpiDetCoupling{iCh,1}	= [];
 			SOPhase						= [];
 			cnt							= 1;
+            SmoothSO = lowpass(SOGA{iCh,1}',1,Fs,'Steepness',0.99); %smooth signal for phase extraction
+            SmoothSO = SmoothSO';
 			for iSO = 1:size(NegativePeaks{iCh,1},1)
+                
+                
+                SOStart = round(twindow*Fs)+ (ZeroCrossings{iCh,1}(1,iSO) - NegativePeaks{iCh,1}(iSO,1)); 
+                SOEnd = round(twindow*Fs) + (ZeroCrossings{iCh,1}(3,iSO) - NegativePeaks{iCh,1}(iSO,1));
+                
 				spi_cur = [];
 				% If there is a spindle fully inside SO plus minus time
 				% window
-				spi_ind = find(output.spi.events{iCh}(1,:) > NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs) & output.spi.events{iCh}(2,:) < NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
+				spi_ind = find(output.spi.events{iCh}(1,:) > NegativePeaks{iCh,1}(iSO,1)+ (ZeroCrossings{iCh,1}(1,iSO) - NegativePeaks{iCh,1}(iSO,1)) & output.spi.events{iCh}(1,:) < NegativePeaks{iCh,1}(iSO,1)+ (ZeroCrossings{iCh,1}(3,iSO) - NegativePeaks{iCh,1}(iSO,1)));
 				if size(spi_ind,2) > 0 % if at least one spindle was found
 					spi_cur = output.spi.events{iCh}(:,spi_ind);
-				end
-				for iSpi = 1:size(spi_cur,2)
-					SOPhase = rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:)))); % SO phase along entire window
-					[~, SpiAmpIndex] = max(spi_amp(iCh, spi_cur(1,iSpi):spi_cur(2,iSpi))); % find spindle maximum amp (samples from spindle start)
-					tmp = spi_cur(1,iSpi) + SpiAmpIndex - 1; % spindle maximum amp in global samples
-					tmp = tmp - (NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs)); % spindle maximum amp in samples from SO window start
+                end
+                
+                for iSpi = 1:size(spi_cur,2)
+					SOPhase = rad2deg(angle(hilbert(SmoothSO(iSO,SOStart:SOEnd)))); % SO phase along entire window
+% 					[~, SpiAmpIndex] = max(spi_amp(iCh, spi_cur(1,iSpi):spi_cur(2,iSpi))); % find spindle maximum amp (samples from spindle start)
+% 					tmp = spi_cur(1,iSpi) + SpiAmpIndex - 1; % spindle maximum amp in global samples
+                    tmp = spi_cur(1,iSpi);					
+                    tmp = tmp - (NegativePeaks{iCh,1}(iSO,1)+ SOStart -round(twindow*Fs)); % spindle maximum amp in samples from SO window start
 					SloSpiDetCoupling{iCh,1}(cnt,1) = SOPhase(round(tmp)); % note down phase there
 					cnt = cnt + 1;
 				end
