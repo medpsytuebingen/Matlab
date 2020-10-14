@@ -705,11 +705,8 @@ if cfg.spi
 	output.spi.amp_std			= spi_amp_std;
 	output.spi.amp_mean			= spi_amp_mean;
 	output.spi.thr				= thr;
-	if isfield(cfg,'rip')%keep spindle filtered data for spindle rippel coupling 
-        clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi
-    else
-        clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
-	end
+	
+	clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
 end
 
 %% SOs
@@ -727,6 +724,7 @@ if cfg.slo
 	slo_raw				= data_slo.trial{1};
 	slo_std				= std(slo_raw(:,any(scoring_fine==cfg.code_NREM,2))');
 	slo_mean			= mean(abs(slo_raw(:,any(scoring_fine==cfg.code_NREM,2))'));
+	clear data_slo
 	
 	% Find negative amplitudes bigger than Threshold
 	SOEpisodes = cell(numel(chans),1);
@@ -1057,6 +1055,7 @@ elseif cfg.the
 	output.the.freq		= cfg.the_freq;
 	
 	the_raw				= data_the.trial{1};
+	clear data_the
 	the_amp				= abs(hilbert(the_raw'))'; % needs to be transposed for hilbert, then transposed back...
 	
 	output.the.amp_sum	= sum(the_amp(:,any(scoring_fine==cfg.code_REM,2))');
