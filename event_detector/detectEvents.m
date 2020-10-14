@@ -279,6 +279,9 @@ elseif tmp_diff > 0 % scoring is shorter than data (happens e.g., with SchlafAUS
     data.trial{1}(:, end-(tmp_diff-1):end)	= [];
 	data.time{1}(end-(tmp_diff-1):end)	= [];
 	data.sampleinfo(2) = data.sampleinfo(2) - tmp_diff;
+    wng = ['Data is longer than scoring by ' num2str(tmp_diff) ' sample(s) / ' num2str(tmp_diff/data.fsample) 's. Will cut data but you should find out how that happened.'];
+	wng_cnt = wng_cnt+1; output.info.warnings{wng_cnt} = wng; 
+	warning(wng)
 end
 clear tmp_diff
 
