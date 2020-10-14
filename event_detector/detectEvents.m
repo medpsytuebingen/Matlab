@@ -706,7 +706,7 @@ if cfg.spi
 	output.spi.amp_mean			= spi_amp_mean;
 	output.spi.thr				= thr;
 	
-	clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi
+	clear spi_amp_tmp TotalNumberOfSpi EpisodeDurations spi data_spi spi_raw
 end
 
 %% SOs
@@ -891,7 +891,7 @@ if cfg.slo
 		output.SloSpiAmpCoupling		= SloSpiAmpCoupling; % based on spindle amplitude maximum around each slow wave
 		output.SloSpiDetCoupling		= SloSpiDetCoupling; % similar to above but only if a spindle event was detected
 	end
-	% clear data_slo SOEpisodes NegativePeaks SOGA slo_raw slo_std slo_mean
+    clear spi_amp slo_raw data_slo SOEpisodes NegativePeaks SOGA slo_std
 end
 
 %% Ripple detection
