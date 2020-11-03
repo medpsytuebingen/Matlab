@@ -412,7 +412,7 @@ output.REMepisode			= REMEpisodes;
 output.WAKEpisodes			= WAKEpisodes;
 
 %% Spectrum
-% Will be computed on artifact-free data, and separately for NREM and REM
+% Will be computed on data incl. artifacts, separately for NREM and REM
 if cfg.spectrum
 	disp('Calculating spectrum...')
 	spec_freq = [1 45]; % let's not ask the user (to make sure the spindle range is included in this range)
