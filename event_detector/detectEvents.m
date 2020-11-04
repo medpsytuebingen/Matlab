@@ -53,7 +53,7 @@ function output = detectEvents(cfg, data)
 % .slo_dur_min					lower duration threshold; default: 0.5
 % .slo_dur_max					upper duration threshold; default: 2.0
 % .slo_thr						the STD scaled by this factor will be the amplitude threshold; default: 1.5
-% .slo_peak2peak_min            Minimum peak 2 peak amplitude; default: 0.07
+% .slo_peak2peak_min            minimum peak 2 peak amplitude (in same unit as recording); default: 0.07
 % .slo_freq						frequency range in which to perform detection; default: [0.1 3.5]
 % .slo_filt_ord					filter order; default: 3
 %
@@ -175,7 +175,7 @@ if ~isfield(cfg, 'slo_thr')
 	cfg.slo_thr					= 1.5; % in SD; nn: 1, 1.5, 2; hongi 1.5 (with rms)
 end
 if ~isfield(cfg, 'slo_peak2peak_min')
-	cfg.slo_peak2peak_min       = 0.07; % in same scaling as recoprding!
+	cfg.slo_peak2peak_min       = 0.07; % in same unit as recording!
 end
 if ~isfield(cfg, 'slo_freq')
 	cfg.slo_freq				= [0.1 3.5]; % in Hz
