@@ -53,7 +53,7 @@ function output = detectEvents(cfg, data)
 % .slo_dur_min					lower duration threshold; default: 0.5
 % .slo_dur_max					upper duration threshold; default: 2.0
 % .slo_thr						the STD scaled by this factor will be the amplitude threshold; default: 1.5
-% .slo_peak2peak_min            Minimum peak 2 peak amplitude; default: 0.07
+% .slo_peak2peak_min            minimum peak 2 peak amplitude (in same unit as recording); default: 0.07
 % .slo_freq						frequency range in which to perform detection; default: [0.1 3.5]
 % .slo_filt_ord					filter order; default: 3
 %
@@ -69,6 +69,7 @@ function output = detectEvents(cfg, data)
 %								if empty, the threshold will be determined separately for each channel
 % .spi_freq						int array (1 x 2); frequency range in which to perform detection, default: [12 16])
 %								Note: if cfg.spi_indiv == 1 this will be the range in which the individual spindle frequency peak is termined; filtering will then be performed at this frequency +/- cfg.spi_indiv_win
+% .spi_peakdist_max				maximum allowed peak-to-peak distance within spindles (in sec), default: 0.125
 % .spi_filt_ord					order of spindle band filter; default: 6
 % .spi_indiv					logical; use individual spindle peak frequencies (calculated based on IRASA-computed oscillatory component, within frequency window provided in spi_indiv_win and on channels in spi_indiv_chan); default: 0
 % .spi_indiv_win				int (in Hz); width of frequency window over which to perform spindle detection (individual spindle peak frequency +/- spi_indiv_win); default: 2
@@ -175,7 +176,7 @@ if ~isfield(cfg, 'slo_thr')
 	cfg.slo_thr					= 1.5; % in SD; nn: 1, 1.5, 2; hongi 1.5 (with rms)
 end
 if ~isfield(cfg, 'slo_peak2peak_min')
-	cfg.slo_peak2peak_min       = 0.07; % in same scaling as recoprding!
+	cfg.slo_peak2peak_min       = 0.07; % in same unit as recording!
 end
 if ~isfield(cfg, 'slo_freq')
 	cfg.slo_freq				= [0.1 3.5]; % in Hz
@@ -200,6 +201,9 @@ if ~isfield(cfg, 'spi_thr')     % to do: for consistency, all input arrays shoul
 	cfg.spi_thr(3,1)			= 2.5;
 elseif isfield(cfg, 'spi_thr') && length(cfg.spi_thr) ~= 3
 	error('Spindle thresholds not provided properly (should be 3x1 vector in cfg.spi_thr).')
+end
+if ~isfield(cfg, 'spi_peakdist_max') 
+	cfg.spi_peakdist_max		= 0.125;
 end
 if ~isfield(cfg, 'spi_thr_chan')
 	cfg.spi_thr_chan			= [];
@@ -412,7 +416,7 @@ output.REMepisode			= REMEpisodes;
 output.WAKEpisodes			= WAKEpisodes;
 
 %% Spectrum
-% Will be computed on artifact-free data, and separately for NREM and REM
+% Will be computed on data incl. artifacts, separately for NREM and REM
 if cfg.spectrum
 	disp('Calculating spectrum...')
 	spec_freq = [1 45]; % let's not ask the user (to make sure the spindle range is included in this range)
@@ -669,7 +673,7 @@ if cfg.spi
 					% + no peak-to-peak distance is more than 125ms
 					% + the event does not overlap with an artifact
 					[pks,locs] = findpeaks(DataTmpSpi(1, window_size:end-window_size),'MinPeakProminence', thr(1, iCh));
-					if ~any(isLongEnough) || ~any(MaxIsThere) || (numel(locs) > 1 && max(diff(locs)) > 0.125 * Fs)
+					if ~any(isLongEnough) || ~any(MaxIsThere) || (numel(locs) > 1 && max(diff(locs)) > cfg.spi_peakdist_max * Fs)
 						TempIdx = [TempIdx iSpi];
 					elseif isArt([CurrentSpindles(1,iSpi),CurrentSpindles(2,iSpi)], cfg.artfctdef{iCh})
 						TempIdx = [TempIdx iSpi];
