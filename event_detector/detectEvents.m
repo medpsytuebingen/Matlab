@@ -573,7 +573,8 @@ if cfg.spi
 	cfg_pp.bpfiltord	= cfg.spi_filt_ord;
 	data_spi			= ft_preprocessing(cfg_pp, data);
 	
-	spi_raw				= data_spi.trial{1};
+	spi_raw				= data_spi.trial{1}; 
+	clear data_spi
 	spi_amp				= abs(hilbert(spi_raw'))'; % needs to be transposed for hilbert, then transposed back...
 	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))'); % computed on data without artifacts!
 	spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
@@ -615,16 +616,16 @@ if cfg.spi
 			SpiEnd = strfind(isLongEnough',[1 0])-1; %find spindle Ending subtract 1 because of added 0 in the beginning
 			
 			% Some plots for debugging
-			if cfg.debugging
-				win = 1:50000;
-				spi_raw = data_spi.trial{1}(iCh, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
-				plot(win/Fs, spi_raw(1,win)), hold on			% raw signal
-				plot(win/Fs, spi_amp_tmp(iCh,win), 'r')			% envelope
-				plot(win/Fs, FastSpiAmplitudeTmp(win), 'r')		% smoothed envelope
-				line([win(1)/Fs win(end)/Fs],[thr(1, iCh) thr(1, iCh)]) % threshold
-				plot(win/Fs, above_threshold(win))				% threshold crossed
-				plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
-			end
+% 			if cfg.debugging
+% 				win = 1:50000;
+% 				spi_raw = data_spi.trial{1}(iCh, NREMEpisodes(1,iEp)*Fs : NREMEpisodes(2,iEp)*Fs);
+% 				plot(win/Fs, spi_raw(1,win)), hold on			% raw signal
+% 				plot(win/Fs, spi_amp_tmp(iCh,win), 'r')			% envelope
+% 				plot(win/Fs, FastSpiAmplitudeTmp(win), 'r')		% smoothed envelope
+% 				line([win(1)/Fs win(end)/Fs],[thr(1, iCh) thr(1, iCh)]) % threshold
+% 				plot(win/Fs, above_threshold(win))				% threshold crossed
+% 				plot(win/Fs, isLongEnough(win))					% crosses min-length criterion
+% 			end
 
 			% Delete spindle if it is cut by end or beginning of epoch
 			if ~isempty(SpiBeginning) && ~isempty(SpiEnd)
@@ -651,7 +652,7 @@ if cfg.spi
 				% If spindle is too close to the recording end, get rid of
 				% it right away, otherwise check all other criteria
 				window_size = 5 * Fs; % in sec
-				if CurrentSpindles(2,iSpi)+window_size < data_spi.sampleinfo(2) %delete Spi to close to recording end
+				if CurrentSpindles(2,iSpi)+window_size < size(spi_raw, 2) %delete Spi to close to recording end
 					spi_win = CurrentSpindles(1,iSpi)-window_size : CurrentSpindles(2,iSpi)+window_size;
 					DataTmpSpi = spi_raw(iCh, spi_win); % get filtered spindle signal for each spindle + - 5sec
 					FastSpiAmplitudeTmp = smooth(spi_amp(iCh, spi_win),40);% get smoothed instantaneous amplitude
