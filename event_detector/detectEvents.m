@@ -579,7 +579,11 @@ if cfg.spi
 	
 	spi_raw				= data_spi.trial{1}; 
 	clear data_spi
-	spi_amp				= abs(hilbert(spi_raw'))'; % needs to be transposed for hilbert, then transposed back...
+	spi_amp				= nan(size(spi_raw));
+	for iCh = 1:size(spi_raw, 1)
+		spi_amp(iCh, :)	= abs(hilbert(spi_raw(iCh,:)));
+	end
+% 	spi_amp				= abs(hilbert(spi_raw'))'; % needs to be transposed for hilbert, then transposed back...
 	spi_amp_mean		= mean(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))'); % computed on data without artifacts!
 	spi_amp_std			= std(spi_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
@@ -911,7 +915,11 @@ if cfg.rip
 	data_rip			= ft_preprocessing(cfg_pp, data);
 	
 	rip_raw				= data_rip.trial{1};
-	rip_amp				= abs(hilbert(rip_raw'))'; % needs to be transposed for hilbert, then transposed back...
+	rip_amp				= nan(size(rip_raw));
+	for iCh = 1:size(rip_raw, 1)
+		rip_amp(iCh, :)	= abs(hilbert(rip_raw(iCh,:)));
+	end
+% 	rip_amp				= abs(hilbert(rip_raw'))'; % needs to be transposed for hilbert, then transposed back...
 	rip_amp_mean		= mean(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	rip_amp_std			= std(rip_amp(:,any(scoring_fine==cfg.code_NREM,2))');
 	
@@ -1061,7 +1069,11 @@ elseif cfg.the
 	
 	the_raw				= data_the.trial{1};
 	clear data_the
-	the_amp				= abs(hilbert(the_raw'))'; % needs to be transposed for hilbert, then transposed back...
+	the_amp				= nan(size(the_raw));
+	for iCh = 1:size(the_raw, 1)
+		the_amp(iCh, :)	= abs(hilbert(the_raw(iCh,:)));
+	end
+% 	the_amp				= abs(hilbert(the_raw'))'; % needs to be transposed for hilbert, then transposed back...
 	
 	output.the.amp_sum	= sum(the_amp(:,any(scoring_fine==cfg.code_REM,2))');
 	output.the.amp_mean = mean(the_amp(:,any(scoring_fine==cfg.code_REM,2))');
