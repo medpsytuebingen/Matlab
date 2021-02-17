@@ -769,6 +769,8 @@ if cfg.slo
 		SOEpisodes{iCh,1} = round(SOEpisodes{iCh,1});%compensate if Fs is not integer
 		ZeroCrossings{iCh,1} = zeros(3,size(SOEpisodes{iCh,1},2));
         TmpIndex = [];
+        output.slospi.spiIndx{iCh} = [];
+        output.slospi.sloIndx{iCh} = [];
         for iEvent = 1:size(SOEpisodes{iCh,1},2)
 			% Check time to recording end
 			if SOEpisodes{iCh,1}(2,iEvent)+2*Fs < data.sampleinfo(2)
@@ -877,7 +879,9 @@ if cfg.slo
 				spi_ind = find(output.spi.events{iCh}(1,:) > NegativePeaks{iCh,1}(iSO,1)-round(twindow*Fs) & output.spi.events{iCh}(2,:) < NegativePeaks{iCh,1}(iSO,1)+round(twindow*Fs));
 				if size(spi_ind,2) > 0 % if at least one spindle was found
 					spi_cur = output.spi.events{iCh}(:,spi_ind);
-				end
+                    output.slospi.spiIndx{iCh} = [output.slospi.spiIndx{iCh}, spi_ind]; %store index of coupled spindle
+                    output.slospi.sloIndx{iCh} = [output.slospi.sloIndx{iCh}, spi_ind]; %store index of coupled slow oscillation
+        		end
 				for iSpi = 1:size(spi_cur,2)
 					SOPhase = rad2deg(angle(hilbert(SOGA{iCh,1}(iSO,:)))); % SO phase along entire window
 					[~, SpiAmpIndex] = max(spi_amp(iCh, spi_cur(1,iSpi):spi_cur(2,iSpi))); % find spindle maximum amp (samples from spindle start)
@@ -887,7 +891,9 @@ if cfg.slo
 					cnt = cnt + 1;
 				end
 			end
-		end
+        end
+        output.slospi.spiIndx{iCh} = unique(output.slospi.spiIndx{iCh}); %compensate that one spindles can be coupled with several slow oscillation.
+        output.slospi.sloIndx{iCh} = unique(output.slospi.sloIndx{iCh}); %compensate that one slow oscillation can be coupled with several spindles.
 	end
 	
 	disp(['SO detection done. ' num2str(num_rej) ' SOs (around ' num2str(round(num_rej/numel(chans))) ' per channel) were rejected because they overlapped with artifacts.'])
