@@ -166,6 +166,7 @@ hold on
 sleepStage_legend        = cell(0);  % for the legend, collect names of sleep stages that have actually occured
 handlevector = [];
 for iSt = sleepStage' % Needs ' for whatever reason
+	warning("Unclear if this is entirely correct. Better double check the following lines.")
     t                       = hypnogram_plot.(iSt{1});
     t_diffs                 = diff(t) == 1; % find consecutive occurrences of this stage (= episodes)
     t_diffs                 = [0 t_diffs 0]; % so we also find the first and last one

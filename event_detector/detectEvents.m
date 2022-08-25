@@ -651,6 +651,7 @@ if cfg.spi
 			
 			CurrentSpindles = spi{iEp,iCh};
 			TempIdx = []; % these spindle candidates will be eliminated
+			if cfg.verbose, tic, end
 			for iSpi = 1:size(CurrentSpindles,2)
 				if cfg.verbose
 					disp(['Spindel ' num2str(iSpi)])
