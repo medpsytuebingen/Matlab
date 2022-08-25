@@ -114,7 +114,7 @@ function output = detectEvents(cfg, data)
 % . Do merging of close events / check again for length?
 %
 % AUTHORS:
-% Jens Klinzing, klinzing@princeton.edu
+% Jens Klinzing, jens.klinzing@uni-tuebingen.de
 % Niels Niethard, niels.niethard@medizin.uni-tuebingen.de (main detection algorithms)
 % Hong-Viet V. Ngo, h.ngo@donders.ru.nl & Til Ole Bergmann, til-ole.bergmann@lir-mainz.de (generic detection algorithm)
 
